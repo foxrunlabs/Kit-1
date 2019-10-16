@@ -1,0 +1,218 @@
+;===============================================================================
+; Copyright 2019 Ryan Clarke
+;
+; Licensed under the Apache License, Version 2.0 (the "License"); you may not
+; use this file except in compliance with the License. You may obtain a copy of
+; the License at
+; 
+;     http://www.apache.org/licenses/LICENSE-2.0
+;
+; Unless required by applicable law or agreed to in writing, software
+; distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+; WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+; License for the specific language governing permissions and limitations under
+; the License.
+;===============================================================================
+
+;===============================================================================
+; Program   : KitBIOS
+; File Name : sdcard.a65
+; Project   : Kit-1 8-bit Computer
+; Author    : Ryan Clarke
+; E-mail    : kj6msg@icloud.com
+;-------------------------------------------------------------------------------
+; Purpose   : KitBIOS SD card functions.
+;===============================================================================
+
+
+.PC02
+
+.INCLUDE    "kit1.inc"
+
+.IMPORT     spi_xfer
+
+.EXPORT     sdc_init
+.EXPORT     sdc_send_cmd
+
+
+;===============================================================================
+; SD CARD FUNCTIONS
+;===============================================================================
+
+;= SDC INIT ====================================================================
+; Initialize SD card.
+;
+; Parameters:
+;   none.
+;
+; Returns:
+;   A = status.
+;
+; Remarks:
+;   This function initializes the SD card. It returns zero if the card remains
+;   uninitialized/invalid, and returns one if initialized.
+
+.PROC sdc_init
+
+            lda     #0
+            pha                         ; initial return value is zero
+            
+            ;- enter native mode -----------------------------------------------
+            ldy     #10                 ; send greater than 74 clock cycles
+native:     lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            
+            dey
+            bne     native              ; check for zero rollover
+            
+            ;- select SD card --------------------------------------------------
+            lda     #SDC_nCS
+            trb     VIA_ORA             ; nCS low
+            
+            ;- set SD card to idle state ---------------------------------------
+            lda     #CMD0
+            stz     CMDARG+3            ; CMD0 argument is always $00000000
+            stz     CMDARG+2
+            stz     CMDARG+1
+            stz     CMDARG
+            ldx     #$95                ; CRC for CMD0 is always $95
+            jsr     sdc_send_cmd        ; send it
+            cmp     #SDCIDLE
+            bne     deselect            ; SD card didn't go idle
+            
+            ;- start testing for card version ----------------------------------
+            lda     #CMD8            
+            stz     CMDARG+3            ; CMD8 argument $000001AA
+            stz     CMDARG+2
+            ldx     #$01
+            stx     CMDARG+1
+            ldx     #$AA
+            stx     CMDARG
+            ldx     #$87                ; CRC for CMD8 is always $87
+            jsr     sdc_send_cmd
+            pha                         ; save first byte of R7 response
+            
+            ldy     #4                  ; there are four more bytes of R7
+cmd8resp:   lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            
+            dey
+            bne     cmd8resp            ; check for zero rollover
+            
+            tax                         ; save last R7 response byte
+            pla                         ; get first R7 response byte back
+            bit     #ILLEGAL
+            bne     notv2               ; illegal command, possibly v1 or MMC
+            
+            txa                         ; get last R7 response byte back
+            cmp     #$AA                ; check for 'echo back'
+            bne     deselect            ; 'echo back' not valid, unknown card
+            
+            ;- activate initializaton routine ----------------------------------
+acmd41:     lda     #CMD55
+            stz     CMDARG+3            ; CMD55 argument always $00000000
+            stz     CMDARG+2
+            stz     CMDARG+1
+            stz     CMDARG
+            ldx     #$FF                ; dummy CRC
+            jsr     sdc_send_cmd        ; send CMD55 before sending ACMD41
+            
+            lda     #ACMD41
+            ldx     #$40                ; ACMD41 argument always $40000000
+            stx     CMDARG+3
+            stz     CMDARG+2
+            stz     CMDARG+1
+            stz     CMDARG
+            ldx     #$FF                ; dummy CRC
+            jsr     sdc_send_cmd
+            bit     #ILLEGAL
+            bne     deselect            ; illegal command, unknown card
+            
+            bit     #SDCIDLE
+            bne     acmd41              ; keep trying until not idle
+            
+            ;- set block size to 512 bytes -------------------------------------
+setblock:   lda     #CMD16
+            stz     CMDARG+3            ; CMD16 argument $00000200 for 512 bytes
+            stz     CMDARG+2
+            ldx     #$02
+            stx     CMDARG+1
+            stz     CMDARG
+            ldx     #$FF                ; dummy CRC
+            jsr     sdc_send_cmd
+            bit     #ILLEGAL
+            bne     deselect            ; illegal command, unknown card
+            
+            pla                         ; retrieve stored return value
+            inc     A                   ; SD card initialized!
+            pha                         ; save it again
+            bra     deselect
+            
+            ;- check if SD card v1 or MMC --------------------------------------
+notv2:      ; TODO
+            
+                        
+            ;- deselect SD card ------------------------------------------------
+deselect:   lda     #SDC_nCS
+            tsb     VIA_ORA             ; nCS high
+            
+            ;- flush SD card interface -----------------------------------------
+            lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            
+            pla                         ; status of SD card in A
+            rts
+
+.ENDPROC
+
+
+;= SDC SEND CMD ================================================================
+; Send command to SD card.
+;
+; Parameters:
+;   A      = command.
+;   X      = 8-bit CRC.
+;   CMDARG = 32-bit command argument.
+;
+; Returns:
+;   A = response.
+;
+; Remarks:
+;   This function sends an 8-bit command, a 32-bit argument, and an 8-bit CRC
+;   to the SD card. It returns an 8-bit response. The caller must select and
+;   deselect the SD card before calling this function.
+
+.PROC sdc_send_cmd
+
+            phx                         ; save CRC
+            jsr     spi_xfer            ; send command
+            
+            lda     CMDARG+3            ; send 32-bit argument
+            jsr     spi_xfer
+            lda     CMDARG+2
+            jsr     spi_xfer
+            lda     CMDARG+1
+            jsr     spi_xfer
+            lda     CMDARG
+            jsr     spi_xfer
+            
+            pla                         ; get 8-bit CRC
+            jsr     spi_xfer
+            
+            ldy     #10                 ; 10 attempts at waiting for response
+response:   lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            cmp     #$FF                ; check for anything other than $FF
+            bne     done
+            
+            dey
+            bne     response            ; keep trying for a response
+            
+done:       rts
+
+.ENDPROC
+
+
+;===============================================================================
+
+.END

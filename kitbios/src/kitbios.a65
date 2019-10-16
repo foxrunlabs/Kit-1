@@ -1,0 +1,632 @@
+;===============================================================================
+; Copyright 2019 Ryan Clarke
+;
+; Licensed under the Apache License, Version 2.0 (the "License"); you may not
+; use this file except in compliance with the License. You may obtain a copy of
+; the License at
+; 
+;     http://www.apache.org/licenses/LICENSE-2.0
+;
+; Unless required by applicable law or agreed to in writing, software
+; distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+; WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+; License for the specific language governing permissions and limitations under
+; the License.
+;===============================================================================
+
+;===============================================================================
+; Program   : KitBIOS
+; File Name : kitbios.a65
+; Project   : Kit-1 8-bit Computer
+; Author    : Ryan Clarke
+; E-mail    : kj6msg@icloud.com
+;-------------------------------------------------------------------------------
+; Purpose   : Kit-1 BIOS.
+;===============================================================================
+
+
+.PC02
+
+.INCLUDE    "kit1.inc"
+
+.IMPORT     kitmon
+.IMPORT     sdc_init
+.IMPORT     sdc_send_cmd
+.IMPORT     spi_xfer
+
+.EXPORT     rst
+
+.EXPORT     cputs
+.EXPORT     getch
+.EXPORT     putch
+.EXPORT     read
+.EXPORT     write
+
+
+;===============================================================================
+; MACROS
+;===============================================================================
+
+;= CONSTANTS ===================================================================
+
+            FREQ = 5                    ; CPU clock in MHz
+
+            MAJOR = 0
+            MINOR = 1
+            PATCH = 0
+
+            .DEFINE VERSION .SPRINTF("%d.%d.%d", MAJOR, MINOR, PATCH)
+
+            ;- py65mon specific definitions ------------------------------------
+        .IFDEF PY65
+            PY65_PUTC = ACIA + $4       ; repurpose unused ACIA registers as
+            PY65_GETC = ACIA + $5       ; input/output for py65mon
+        .ENDIF
+
+
+;===============================================================================
+; KITBIOS
+;===============================================================================
+
+.CODE
+            ;- ACIA initialization ---------------------------------------------
+kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
+            sta     ACIA_COMMAND
+            lda     #%00011111          ; 8-N-1, 19200 baud
+            sta     ACIA_CONTROL
+            
+            ;- BIOS call table address -----------------------------------------
+            lda     #.LOBYTE(bios_tbl_l)
+            sta     BIOSTL
+            lda     #.HIBYTE(bios_tbl_l)
+            sta     BIOSTL+1
+            lda     #.LOBYTE(bios_tbl_h)
+            sta     BIOSTH
+            lda     #.HIBYTE(bios_tbl_h)
+            sta     BIOSTH+1
+            
+            ;- reset uptime counter --------------------------------------------
+            stz     JIFFIES
+            stz     SECONDS
+            stz     MINUTES
+            stz     HOURS
+            
+            ;- jiffy counter initialization ------------------------------------
+            lda     #%01000000          ; set timer 1 to continuous interrupts
+            sta     VIA_ACR
+            
+            lda     #.LOBYTE(19530)     ; set timer 1 to 256 Hz based on a
+            sta     VIA_T1CL            ; 5 MHz clock
+            lda     #.HIBYTE(19530)     ; 
+            sta     VIA_T1CH            ; 5 MHz / 19531 ~= 256 Hz
+            
+            lda     #%11000000
+            sta     VIA_IER             ; timer 1 interrupt enabled
+            cli                         ; global interrupts enabled
+            
+            ;- clear screen ----------------------------------------------------
+            ldx     #.HIBYTE(clrscr)
+            lda     #.LOBYTE(clrscr)
+            jsr     cputs
+            
+            ;- print banner ----------------------------------------------------
+            ldx     #.HIBYTE(banner)
+            lda     #.LOBYTE(banner)
+            jsr     cputs
+            
+            ;- SPI setup -------------------------------------------------------
+            lda     #(SDC_MOSI | SDC_nCS)
+            sta     VIA_ORA             ; MOSI and nCS high
+            ora     #SDC_CLK
+            sta     VIA_DDRA            ; MOSI, nCS, and CLK as outputs
+            
+            ;- SD card setup ---------------------------------------------------
+            lda     #SDC_CD             ; check CD
+            bit     VIA_IRA
+            beq     @monitor            ; not detected, skip initialization
+            
+            jsr     sdc_init
+            beq     @monitor            ; not initialized
+            
+            ldx     #.HIBYTE(sdcard)    ; card detected
+            lda     #.LOBYTE(sdcard)
+            jsr     cputs
+            
+            ;- go to KitMon monitor --------------------------------------------
+@monitor:   
+        .IFNDEF PY65
+            brk                         ; BRK triggers the monitor on real CPU
+            .BYTE   $00                 ; dummy byte for ca65 assembler
+        .ELSE
+            php                         ; preserve the status flags
+            
+            stx     XREG                ; save X first
+            
+            tsx
+            inx                         ; adjust for pushed status flags
+            stx     SREG                ; save the stack pointer
+            
+            sta     AREG                ; now let's grab A and Y
+            sty     YREG
+            
+            lda     #.LOBYTE(@monitor)  ; creates the same address as the BRK
+            sta     PCREG               ; instruction on real CPU
+            lda     #.HIBYTE(@monitor)
+            sta     PCREG+1
+            
+            pla                         ; retrieve the status flags
+            sta     PREG                ; save status flags
+            
+            jmp     kitmon
+        .ENDIF
+
+
+;===============================================================================
+; BIOS CALLS
+;===============================================================================
+
+;= #1 PUTCH ====================================================================
+; Write a character to the terminal.
+;
+; Parameters:
+;   A - character.
+;
+; Returns:
+;   none.
+;
+; Remarks:
+;   This function writes a character directly to the ACIA. A delay routine is
+;   implemented to allow transmission at 19200 baud. The constant FREQ must be
+;   defined prior to use, and it should be an integer value equal to the CPU
+;   speed in MHz.
+
+.CODE
+
+.PROC putch
+
+        .IFNDEF PY65
+            sta     ACIA_DATA
+            
+            ;- 2 + (FREQ * 526 - 1) cycle delay --------------------------------
+            ldy     #FREQ               ; (2)
+delay:      ldx     #104                ; (2)
+loop:       dex                         ; (2)
+            bne     loop                ; (3/2) 521 cycles for the loop
+            
+            dey                         ; (2)
+            bne     delay               ; (3/2)
+        .ELSE
+            sta     PY65_PUTC
+        .ENDIF
+            
+            rts
+
+.ENDPROC
+
+
+;= #2 CPUTS ====================================================================
+; Write a string to the terminal.
+;
+; Parameters:
+;   A - string address LSB.
+;   X - string address MSB.
+;
+; Returns:
+;   none.
+;
+; Remarks:
+;   This function writes a NUL terminated string to the terminal using the putch
+;   function. The maximum number of characters it will print is 256.
+
+.CODE
+
+.PROC cputs
+            
+            sta     STRADDR
+            stx     STRADDR+1           ; (STRADDR) = string address
+            
+            ldy     #0                  ; Y = character counter
+loop:       lda     (STRADDR), Y
+            beq     exit
+            
+print:      phy                         ; putch destroys Y
+            jsr     putch               ; write the character to terminal
+
+            ply                         ; restore character counter 
+            iny
+            bne     loop                ; 256 character maximum
+            
+exit:       rts
+
+.ENDPROC
+
+
+;= #3 GETCH ====================================================================
+; Read a character from the terminal.
+;
+; Parameters:
+;   none.
+;
+; Returns:
+;   A - character.
+;
+; Remarks:
+;   This function polls the ACIA indefinitely until a single character is
+;   received. The character is not echoed back to the terminal.
+
+.CODE
+
+.PROC getch
+
+        .IFNDEF PY65
+            lda     ACIA_STATUS
+            bit     #%00001000          ; Receive Data Register Full bit
+            beq     getch               ; keep polling if not set
+        
+            lda     ACIA_DATA
+        .ELSE
+            lda     PY65_GETC
+            beq     getch               ; py65mon will read zero if no character
+        .ENDIF
+            
+            rts
+
+.ENDPROC
+
+
+;= #4 READ =====================================================================
+; Read a 512 byte sector from the SD card.
+;
+; Parameters:
+;   A      = address LSB.
+;   X      = address MSB.
+;   SECTOR = 32-bit sector number.
+;
+; Returns:
+;   A = status.
+;
+; Remarks:
+;   This function reads a 512 byte sector from the SD card and stores the data
+;   at the specified address. It returns zero on failure, or one on success.
+
+.CODE
+
+.PROC read
+
+            sta     SDCADDR
+            stx     SDCADDR+1           ; set the destination address
+            
+            lda     #0
+            pha                         ; default return value
+            
+            ;- select SD card --------------------------------------------------
+            lda     #SDC_nCS
+            trb     VIA_ORA             ; nCS low
+            
+            ;- read sector -----------------------------------------------------
+            lda     #CMD17
+            ldx     #$FF                ; CRC ignored
+            jsr     sdc_send_cmd        ; command argument passed via SECTOR
+            cmp     #0
+            bne     deselect            ; fail if response is anything but zero
+            
+            ;- get data token --------------------------------------------------
+token:      lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            cmp     #DATATKN            ; keep polling until token received
+            bne     token
+            
+            ;- get first 256 bytes ---------------------------------------------
+            ldy     #0
+data0:      lda     #$FF                ; dummy data
+            jsr     spi_xfer            ; get a byte
+            sta     (SDCADDR), Y        ; save received byte
+            
+            iny
+            bne     data0               ; check for zero rollover
+            
+            ;- get second 256 bytes --------------------------------------------
+            inc     SDCADDR+1
+            ldy     #0
+data1:      lda     #$FF                ; dummy data
+            jsr     spi_xfer            ; get a byte
+            sta     (SDCADDR), Y        ; save received byte
+            
+            iny
+            bne     data1               ; check for zero rollover
+            
+            ;- get two CRC bytes -----------------------------------------------
+            lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            
+            ;- good transfer ---------------------------------------------------
+            pla                         ; retrieve return value
+            inc     A                   ; success! return value is 1
+            pha                         ; save it again
+            
+            ;- deselect SD card ------------------------------------------------
+deselect:   lda     #SDC_nCS
+            tsb     VIA_ORA             ; nCS high
+            
+            ;- flush SD card interface -----------------------------------------
+            lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            
+            pla                         ; return value in A
+            rts
+
+.ENDPROC
+
+
+;= #5 WRITE ====================================================================
+; Write a 512 byte sector to the SD card.
+;
+; Parameters:
+;   A      = address LSB.
+;   X      = address MSB.
+;   SECTOR = 32-bit sector number.
+;
+; Returns:
+;   A = status.
+;
+; Remarks:
+;   This function writes 512 bytes stored at at the specified address to a
+;   sector on the SD card . It returns zero on failure, or one on success.
+
+.CODE
+
+.PROC write
+
+            sta     SDCADDR
+            stx     SDCADDR+1           ; set the source address
+            
+            lda     #0
+            pha                         ; default return value
+            
+            ;- select SD card --------------------------------------------------
+            lda     #SDC_nCS
+            trb     VIA_ORA             ; nCS low
+            
+            ;- write sector -----------------------------------------------------
+            lda     #CMD24
+            ldx     #$FF                ; CRC ignored
+            jsr     sdc_send_cmd        ; command argument passed via SECTOR
+            cmp     #0
+            bne     deselect            ; fail if response is anything but zero
+            
+            ;- send data token -------------------------------------------------
+token:      lda     #DATATKN            ; always first byte in a data packet
+            jsr     spi_xfer            ; send it to SD card
+                        
+            ;- send first 256 bytes --------------------------------------------
+            ldy     #0
+data0:      lda     (SDCADDR), Y        ; get byte
+            jsr     spi_xfer            ; send it to SD card
+            
+            iny
+            bne     data0               ; check for zero rollover
+            
+            ;- send second 256 bytes -------------------------------------------
+            inc     SDCADDR+1
+            ldy     #0
+data1:      lda     (SDCADDR), Y        ; get byte
+            jsr     spi_xfer            ; send it to SD card
+            
+            iny
+            bne     data1               ; check for zero rollover
+            
+            ;- send two CRC bytes ----------------------------------------------
+            lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            
+            ;- get response ----------------------------------------------------
+            lda     #$FF                ; dummy data
+            jsr     spi_xfer            ; response should be immediate
+            and     #%00011111          ; only care about lower five bits
+            cmp     #ACCEPT
+            bne     deselect            ; anything other than accepted is error
+            
+            ;- good transfer ---------------------------------------------------
+            pla                         ; retrieve saved return value
+            inc     A                   ; success! return value is 1
+            pha                         ; save it again
+            
+            ;- wait for busy status to clear -----------------------------------
+busy:       lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            
+            cmp     #$FF                ; we are waiting for MISO to go from
+            bne     busy                ; low to high
+            
+            ;- deselect SD card ------------------------------------------------
+deselect:   lda     #SDC_nCS
+            tsb     VIA_ORA             ; nCS high
+            
+            ;- flush SD card interface -----------------------------------------
+            lda     #$FF                ; dummy data
+            jsr     spi_xfer
+            
+            pla                         ; return value in A
+            rts
+
+.ENDPROC
+
+
+;===============================================================================
+; INTERRUPT ROUTINES
+;===============================================================================
+
+;= NON-MASKABLE INTERRUPT HANDLER ==============================================
+
+.CODE
+
+nmi:        rti
+
+
+;= RESET HANDLER ===============================================================
+
+.CODE
+
+rst:        sei                         ; disable interrupts
+            cld                         ; disable BCD mode
+            ldx     #$FF
+            txs                         ; reset stack pointer to $01FF
+            jmp     kitbios
+
+
+;= IRQ/BRK HANDLER =============================================================
+
+.CODE
+
+irqbrk:     pha                         ; preserve A, X, and Y
+            phx
+            phy
+            
+            ;- distinguish between IRQ and BRK ---------------------------------
+            tsx                         ; status flag 4 bytes above SP, accounts
+            lda     $0100 + 1 + 3, X    ; for current SP and 3 registers pushed
+            bit     #%00010000
+            bne     break               ; B flag set, go to BRK handler
+            
+            
+;= IRQ HANDLER =================================================================
+
+irq:        lda     VIA_IFR             ; did VIA request interrupt?
+            bmi     @via                ; yes, go to VIA handler
+            bra     irqexit             ; nope, go to IRQ exit routine
+            
+            ;- VIA handler -----------------------------------------------------
+@via:       inc     JIFFIES             ; 256 Hz interrupt
+            bne     @viaclear           ; check for zero rollover
+            
+            inc     SECONDS
+            lda     SECONDS
+            cmp     #60                 ; check for seconds rollover
+            bne     @viaclear
+            
+            stz     SECONDS
+            
+            inc     MINUTES
+            lda     MINUTES
+            cmp     #60                 ; check for minutes rollover
+            bne     @viaclear
+            
+            stz     MINUTES
+            
+            inc     HOURS
+            lda     HOURS
+            cmp     #24                 ; check for hours rollover
+            bne     @viaclear
+            
+            stz     HOURS
+            
+@viaclear:  lda     VIA_T1CL            ; clear timer 1 interrupt flag
+            
+            
+;= IRQ EXIT ====================================================================
+
+irqexit:    ply                         ; restore A, X, and Y
+            plx
+            pla
+            
+            rti
+
+
+;= BREAK HANDLER ===============================================================
+
+break:      ply                         ; retrieve A, X, and Y
+            plx
+            pla
+            
+            sta     AREG                ; save them to the storage locations
+            stx     XREG
+            sty     YREG
+            
+            ;- retrive stack items pushed by BRK instruction -------------------
+            pla                         ; retrieve P flags
+            sta     PREG                ; save to storage location
+            
+            pla                         ; retrieve return address LSB
+            sta     PCREG               ; save
+            pla                         ; retrieve return address MSB
+            sta     PCREG+1             ; save
+            
+            ;- compute BRK address ---------------------------------------------
+            sec
+            lda     PCREG
+            sbc     #2                  ; BRK pushes a return address which is
+            sta     PCREG               ; the BRK instruction + $0002
+            lda     PCREG+1
+            sbc     #0
+            sta     PCREG+1
+            
+            ;- stack is clean --------------------------------------------------
+            tsx                         ; get the stack pointer
+            stx     SREG                ; save
+            
+            ;- reset P flags ---------------------------------------------------
+            lda     #0                  ; easy way to reset everything
+            pha                         ; zero flag cleared, carry flag cleared
+            plp                         ; interrupts enabled, BCD disabled
+            
+            jmp     kitmon              ; launch the monitor
+
+
+;===============================================================================
+; INTERRUPT VECTOR TABLE
+;===============================================================================
+
+.SEGMENT "VECTORS"
+
+            .WORD nmi                   ; $FFFA
+            .WORD rst                   ; $FFFC
+            .WORD irqbrk                ; $FFFE
+
+
+;===============================================================================
+; READ ONLY DATA
+;===============================================================================
+
+;= BIOS CALL TABLE =============================================================
+
+.RODATA
+
+bios_tbl_l: .BYTE .LOBYTE(rst - 1)
+            .BYTE .LOBYTE(putch - 1)
+            .BYTE .LOBYTE(cputs - 1)
+            .BYTE .LOBYTE(getch - 1)
+            .BYTE .LOBYTE(read - 1)
+            .BYTE .LOBYTE(write - 1)
+
+bios_tbl_h: .BYTE .HIBYTE(rst - 1)
+            .BYTE .HIBYTE(putch - 1)
+            .BYTE .HIBYTE(cputs - 1)
+            .BYTE .HIBYTE(getch - 1)
+            .BYTE .HIBYTE(read - 1)
+            .BYTE .HIBYTE(write - 1)
+
+
+;= VT100 COMMANDS ==============================================================
+
+.RODATA
+
+clrscr:     .BYTE ESC, "[2J", ESC, "[H", NUL    ; clear terminal and reset curs.
+
+
+;= STRINGS =====================================================================
+
+.RODATA
+
+banner:     .BYTE "KitBIOS ", VERSION, LF
+            .BYTE "Copyright 2019 Ryan Clarke", LF, LF, NUL
+            
+sdcard:     .BYTE "SD card found.", LF, LF, NUL
+
+
+;===============================================================================
+
+.END

@@ -1,0 +1,97 @@
+;===============================================================================
+; Copyright 2019 Ryan Clarke
+;
+; Licensed under the Apache License, Version 2.0 (the "License"); you may not
+; use this file except in compliance with the License. You may obtain a copy of
+; the License at
+; 
+;     http://www.apache.org/licenses/LICENSE-2.0
+;
+; Unless required by applicable law or agreed to in writing, software
+; distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+; WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+; License for the specific language governing permissions and limitations under
+; the License.
+;===============================================================================
+
+;===============================================================================
+; Program   : KitBIOS
+; File Name : spi.a65
+; Project   : Kit-1 8-bit Computer
+; Author    : Ryan Clarke
+; E-mail    : kj6msg@icloud.com
+;-------------------------------------------------------------------------------
+; Purpose   : KitBIOS SPI functions.
+;===============================================================================
+
+
+.PC02
+
+.INCLUDE    "kit1.inc"
+
+.EXPORT     spi_xfer
+
+
+;===============================================================================
+; SPI FUNCTIONS
+;===============================================================================
+
+;= SPI XFER ====================================================================
+; Read and write a byte via SPI.
+;
+; Parameters:
+;   A - output byte.
+;
+; Returns:
+;   A - input byte.
+;
+; Remarks:
+;   This function bit-bangs the SPI protocol to send and receive a single byte.
+;   SPI clock rate is ~119 kHz with a 5 MHz CPU clock.
+
+.PROC spi_xfer
+
+            sta     OUTB
+            stz     INB
+            
+            lda     VIA_IRA             ; we don't want to change nCS
+            and     #SDC_nCS            ; isolate nCS
+            ora     #SDC_CLK            ; make sure CLK high
+            sta     SHADOW              ; save in shadow register
+            
+            lda     #0                  ; starting value for output register
+            ldx     #8                  ; 8-bits
+            
+            sei                         ; no interrupts!
+            
+            ;- bit sending routine is 42 cycles total --------------------------
+loop:       asl     OUTB                ; (5) shift transmit bit to C flag
+            ror     A                   ; (2) rotate transmit bit into A
+            lsr     A                   ; (2) shift transmit bit to MOSI bit
+            ora     SHADOW              ; (3) combine MOSI with shadow register
+            sta     VIA_ORA             ; (4) send it to the SPI port
+            
+            lda     VIA_IRA             ; (4) get MISO bit
+            asl     A                   ; (2) shift MISO bit to C flag
+            rol     INB                 ; (5) rotate MISO bit into received byte
+            
+            lda     #0                  ; (2) start fresh and timing adjustment
+            nop                         ; (2) timing adjustment
+                        
+            dec     VIA_ORA             ; (6) toggle CLK low
+            
+            dex                         ; (2) decrement bit counter
+            bne     loop                ; (3) check for zero rollover
+            
+            ;- clean up and return ---------------------------------------------
+            cli                         ; OK, turn interrupts back on
+            
+            lda     INB                 ; return the received byte in A
+            rts
+
+.ENDPROC
+
+
+;===============================================================================
+
+.END
