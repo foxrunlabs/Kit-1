@@ -46,7 +46,7 @@
 
 ;= CONSTANTS ===================================================================
             
-            PROMPT = '-'
+            PROMPT = '-'                ; command prompt character
             
             CMDMAX = 79                 ; maximum command line length
 
@@ -120,98 +120,114 @@ kitmon:     stz     DADDR               ; initial memory dump address is $0300
 
 
 ;= DUMP ========================================================================
-; Display 16 bytes of memory.
+; Display 128 bytes of memory.
 ;
 ; Parameters:
-;   none.
+;   ARG1 - start address (optional).
 ;
 ; Returns:
 ;   none.
 ;
 ; Remarks:
-;   This function will display 16 bytes of consecutive memory, both in
-;   hexadecimal format and ASCII. If no address is specified on the command
-;   line, then the function will use whatever was last stored in DADDR. The
-;   function automatically increments DADDR by 16 at completion, to fascilitate
-;   quick repetition of memory dumps.
+;   This function will display 128 bytes of consecutive memory in hexadecimal
+;   and ASCII. If no address is specified, then the function will use a stored
+;   address. The function automatically increments updates the stored address at
+;   completion to enable quick repetition of memory dumps.
 
 .CODE
 
 .PROC dump
 
-            ldx     #1
-            jsr     trimspace           ; trim any spaces after command
+            lda     DADDR               ; read stored address LSB
+            sta     ARG1                ; set ARG1 LSB to stored address LSB
+            lda     DADDR+1             ; read stored address MSB
+            sta     ARG1+1              ; set ARG1 MSB to stored address MSB
             
-            lda     cmdln, X
-            beq     printaddr           ; don't update DADDR if no parameter      
+            ldx     #1                  ; set starting offset to 1
+            jsr     trimspace           ; trim spaces after command character
+            
+            lda     cmdln, X            ; read first non-space after command
+            beq     linecount           ; branch if no address entered
             
             ;- get address from command line -----------------------------------
-            lda     #2
-            jsr     getbytes
-            bcc     ::invalid
+            lda     #2                  ; set byte counter to 2
+            jsr     getbytes            ; get 16-bit address from command line
+            bcc     ::invalid           ; branch if invalid address
             
-            lda     word
-            sta     DADDR
-            lda     word+1
-            sta     DADDR+1             ; update DADDR
+            lda     word                ; read address LSB
+            sta     ARG1                ; store address LSB to ARG1 LSB
+            lda     word+1              ; read address MSB
+            sta     ARG1+1              ; store address MSB to ARG1 MSB
             
             ;- print address ---------------------------------------------------
-printaddr:  lda     DADDR+1
-            jsr     printhex
-            lda     DADDR
-            jsr     printhex
-            lda     #':'
-            jsr     putch
-            lda     #' '
-            jsr     putch
+linecount:  ldx     #8                  ; set line counter to 8
+printaddr:  phx                         ; save the line counter
+            lda     ARG1+1              ; read address MSB
+            jsr     printhex            ; print address MSB
+            lda     ARG1                ; read address LSB
+            jsr     printhex            ; print address LSB
+            lda     #':'                ; set character to ':'
+            jsr     putch               ; print ':'
+            lda     #' '                ; set character to space
+            jsr     putch               ; print space
             
-            ;- print 16 bytes --------------------------------------------------
-            ldy     #0
-bytes:      lda     (DADDR), Y
-            phy
-            jsr     printhex
+            ;- print hex bytes -------------------------------------------------
+            ldy     #0                  ; set byte counter to zero
+bytes:      phy                         ; save byte counter
+            lda     (ARG1), Y           ; read byte
+            jsr     printhex            ; print byte in hex
+            lda     #' '                ; set character to space
+            jsr     putch               ; print space
+            ply                         ; restore byte counter
             
-            lda     #' '
-            jsr     putch
-            ply
+            ;- update byte counter ---------------------------------------------
+            iny                         ; increment byte counter
+            cpy     #16                 ; print 16 bytes
+            bne     bytes               ; branch if less than 16 bytes printed
             
-            iny
-            cpy     #16
-            bne     bytes
+            lda     #' '                ; set character to space
+            jsr     putch               ; print space
             
-            lda     #' '
-            jsr     putch
-            
-            ;- print ASCII representation --------------------------------------            
-            ldy     #0
-ascii:      lda     (DADDR), Y
-            cmp     #' '
-            bcc     noprint             ; check for non-printable characters
-            cmp     #DEL                ; outside the range of space and ~
-            bcc     print
+            ;- print ASCII representation --------------------------------------
+            ldy     #0                  ; reset byte counter to zero
+ascii:      lda     (ARG1), Y           ; read byte
+            cmp     #' '                ; space is the lowest printable byte
+            bcc     noprint             ; branch if less than space
+            cmp     #'~'+1              ; tilde is upper end uof printable bytes
+            bcc     print               ; branch if less than or equal to ~
             
 noprint:    lda     #'.'                ; non-printable characters as '.'
-print:      phy
-            jsr     putch
-            ply
+print:      phy                         ; save byte counter
+            jsr     putch               ; print byte in ASCII
+            ply                         ; restore byte counter
             
-            iny
-            cpy     #16
-            bne     ascii               ; print 16 bytes total
+            iny                         ; increment byte counter
+            cpy     #16                 ; print 16 bytes
+            bne     ascii               ; branch if less than 16 bytes printed
             
-            lda     #LF
-            jsr     putch
+            ;- next line -------------------------------------------------------
+            lda     #LF                 ; set character to line feed
+            jsr     putch               ; print line feed
             
-            ;- increment last address by 16 ------------------------------------
-            lda     #16                 ; increment the address by 16 bytes
-            clc                         ; to allow for quicker action on the
-            adc     DADDR               ; command line with a single D
-            sta     DADDR
-            lda     #0
-            adc     DADDR+1
-            sta     DADDR+1
+            clc                         ; clear C for 16-bit addition
+            lda     ARG1                ; read address LSB
+            adc     #16                 ; increment by 16 bytes
+            sta     ARG1                ; store new address LSB
+            lda     ARG1+1              ; read address MSB
+            adc     #0                  ; add carry flag
+            sta     ARG1+1              ; store address MSB
             
-            rts
+            plx                         ; restore line counter
+            dex                         ; decrement line counter
+            bne     printaddr           ; branch if less than 8 lines printed
+            
+            ;- update stored address -------------------------------------------
+            lda     ARG1                ; read address LSB
+            sta     DADDR               ; store address LSB into stored value
+            lda     ARG1+1              ; read address MSB
+            sta     DADDR+1             ; store address MSB into stored value
+            
+            rts                         ; done!
 
 .ENDPROC
 
