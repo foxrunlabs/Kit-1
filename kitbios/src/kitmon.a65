@@ -131,8 +131,8 @@ kitmon:     stz     DADDR               ; initial memory dump address is $0300
 ; Remarks:
 ;   This function will display 128 bytes of consecutive memory in hexadecimal
 ;   and ASCII. If no address is specified, then the function will use a stored
-;   address. The function automatically increments updates the stored address at
-;   completion to enable quick repetition of memory dumps.
+;   address. The function automatically updates the stored address at completion
+;   to enable quick repetition of memory dumps.
 
 .CODE
 
@@ -236,7 +236,8 @@ print:      phy                         ; save byte counter
 ; Write to memory.
 ;
 ; Parameters:
-;   none
+;   ARG1 - starting address.
+;   ...  - bytes.
 ;
 ; Returns:
 ;   none
@@ -248,51 +249,45 @@ print:      phy                         ; save byte counter
 .CODE
 
 .PROC enter
-
-            ldx     #1
-            jsr     trimspace           ; trim spaces right of command
             
-            lda     cmdln, X
-            beq     invalid              ; no address entered
+            ldx     #1                  ; set starting offset to 1
+            jsr     trimspace           ; trim spaces after command character
+            
+            lda     cmdln, X            ; read first non-space after command
+            beq     invalid             ; branch if no address entered
             
             ;- get address from command line -----------------------------------
-            lda     #2
-            jsr     getbytes
-            bcc     invalid
+            lda     #2                  ; set byte counter to 2
+            jsr     getbytes            ; get 16-bit address from command line
+            bcc     invalid             ; branch if invalid address
             
-            lda     word
-            sta     ARG1
-            lda     word+1
-            sta     ARG1+1
-            
-            ;- check for single or multiple entry ------------------------------
-            jsr     trimspace
-            
-            lda     cmdln, X
-            beq     invalid
+            lda     word                ; read address LSB
+            sta     ARG1                ; store address LSB to ARG1 LSB
+            lda     word+1              ; read address MSB
+            sta     ARG1+1              ; store address MSB to ARG1 MSB
             
             ;- get data from command line --------------------------------------
-dataloop:   jsr     trimspace
+dataloop:   jsr     trimspace           ; trim spaces after address/bytes
             
-            lda     cmdln, X
-            bne     getdata
+            lda     cmdln, X            ; read first non-space after addr/byte
+            beq     done                ; branch if nothing entered
             
-            rts                         ; valid data received
-            
-getdata:    lda     #1
-            jsr     getbytes
-            bcc     invalid
+            lda     #1                  ; set byte counter to 1
+            jsr     getbytes            ; get 8-bit byte from command line
+            bcc     invalid             ; branch if invalid byte
             
             ;- store byte at address -------------------------------------------
-            lda     byte
-            sta     (ARG1)
+            lda     byte                ; read byte
+            sta     (ARG1)              ; store byte at address pointed by ARG1
             
-            inc     ARG1
-            bne     dataloop
-            inc     ARG1+1
-            bra     dataloop
+            inc     ARG1                ; increment address pointer LSB
+            bne     dataloop            ; branch if not rolled over yet
+            inc     ARG1+1              ; increment address pointer MSB
+            bra     dataloop            ; branch for more data
 
-invalid:    jmp     ::invalid
+done:       rts                         ; done!
+            
+invalid:    jmp     ::invalid           ; jump to global invalid routine
 
 .ENDPROC
 
