@@ -240,7 +240,7 @@ print:      phy                         ; save byte counter
 ;   ...  - bytes.
 ;
 ; Returns:
-;   none
+;   none.
 ;
 ; Remarks:
 ;   This function writes one or more consecutive bytes to an address specified
@@ -296,10 +296,12 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 ; Fill memory with byte.
 ;
 ; Parameters:
-;   none
+;   ARG1 - starting address.
+;   ARG2 - ending address.
+;   byte - fill byte.
 ;
 ; Returns:
-;   none
+;   none.
 ;
 ; Remarks:
 ;   This function fills an address range with a specified byte. It will not wrap
@@ -308,88 +310,83 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 .CODE
 
 .PROC fill
-
-            ldx     #1
-            jsr     trimspace           ; trim spaces right of index 0
             
-            lda     cmdln, X
-            beq     invalid             ; no first address entered
+            ldx     #1                  ; set starting offset to 1
+            jsr     trimspace           ; trim spaces after command character
+            
+            lda     cmdln, X            ; read first non-space after command
+            beq     invalid             ; branch if no address entered
             
             ;- get first address of range --------------------------------------
-            lda     #2                  ; 16-bit address
-            jsr     getbytes
-            bcc     invalid
+            lda     #2                  ; set byte counter to 2
+            jsr     getbytes            ; get 16-bit address from command line
+            bcc     invalid             ; branch if invalid address
             
             ;- save first address ----------------------------------------------
-            lda     word
-            sta     ARG1
-            lda     word+1
-            sta     ARG1+1
+            lda     word                ; read address LSB
+            sta     ARG1                ; store address LSB to ARG1 LSB
+            lda     word+1              ; read address MSB
+            sta     ARG1+1              ; store address MSB to ARG1 MSB
             
-            jsr     trimspace
+            ;- get last address of range ---------------------------------------
+            jsr     trimspace           ; trim spaces after first address
             
-            lda     cmdln, X
-            beq     invalid             ; no second address entered
+            lda     cmdln, X            ; read first non-space after address
+            beq     invalid             ; branch if no second address entered
             
-            ;- get second address of range -------------------------------------
-            lda     #2                  ; 16-bit address
-            jsr     getbytes
-            bcc     invalid
+            lda     #2                  ; set byte counter to 2
+            jsr     getbytes            ; get 16-bit address from command line
+            bcc     invalid             ; branch if invalid address
             
-            ;- verify second address is not less than first --------------------
-            lda     word+1
-            cmp     ARG1+1
-            bcc     invalid
+            ;- verify second address is greater than or equal to first ---------
+            lda     word+1              ; read second address MSB
+            cmp     ARG1+1              ; compare with first address MSB
+            bcc     invalid             ; branch if second < first
             
-            lda     word
-            cmp     ARG1
-            bcc     invalid
+            lda     word                ; read second address LSB
+            cmp     ARG1                ; compare with first address LSB
+            bcc     invalid             ; branch if second < first
             
             ;- save second address ---------------------------------------------
-            lda     word
-            sta     ARG2
-            lda     word+1
-            sta     ARG2+1
+            lda     word                ; read address LSB
+            sta     ARG2                ; store address LSB to ARG2 LSB
+            lda     word+1              ; read address MSB
+            sta     ARG2+1              ; store address MSB to ARG2 MSB
             
-            jsr     trimspace
+            ;- get fill bytes --------------------------------------------------
+            jsr     trimspace           ; trim spaces after second address
             
-            lda     cmdln, X
-            beq     invalid             ; no fill byte entered
+            lda     cmdln, X            ; read first non-space after address
+            beq     invalid             ; branch if no fill byte entered
             
-            ;- get fill byte ---------------------------------------------------
-            lda     #1
-            jsr     getbytes
-            bcc     invalid
+            lda     #1                  ; set byte counter to 1
+            jsr     getbytes            ; get 8-bit fill byte from command line
+            bcc     invalid             ; branch if invalid byte
             
             ;- fill memory range with byte -------------------------------------
-fillloop:   lda     byte
-            sta     (ARG1)
+fillloop:   lda     byte                ; read fill byte
+            sta     (ARG1)              ; store fill byte in memory
             
-            ;- increment first address -----------------------------------------
-            inc     ARG1
-            bne     rollover
-            inc     ARG1+1
+            ;- increment first address and check for rollover ------------------
+            inc     ARG1                ; increment first address LSB
+            bne     compaddr            ; branch if no rollover from $FF->$00
+            inc     ARG1+1              ; increment first address MSB
+            beq     done                ; branch if rollover from $FFFF->$0000
+                                    
+            ;- keep looping if ARG1 <= ARG2 ------------------------------------
+compaddr:   lda     ARG1+1              ; read first address MSB
+            cmp     ARG2+1              ; compare with second address MSB
+            bcc     fillloop            ; branch if first < second
+            bne     done                ; branch if first <> second
             
-            ;- check for $FFFF->$0000 rollover ---------------------------------
-rollover:   lda     ARG1+1
-            bne     compaddr
-            lda     ARG1
-            beq     done            
-            
-            ;- keep looping if ARG1 <= ARG2 ----------------------------------
-compaddr:   lda     ARG1+1
-            cmp     ARG2+1
-            bcc     fillloop
-            bne     done
-            
-            lda     ARG1
-            cmp     ARG2
-            bcc     fillloop
-            beq     fillloop
+            lda     ARG1                ; read first address LSB
+            cmp     ARG2                ; compare with second address LSB
+            bcc     fillloop            ; branch if first < second
+            beq     fillloop            ; branch if first == second
                         
-done:       rts
+done:       rts                         ; done!
             
-invalid:    jmp     ::invalid
+invalid:    jmp     ::invalid           ; jump to global invalid routine
 
 .ENDPROC
 
@@ -398,10 +395,10 @@ invalid:    jmp     ::invalid
 ; Display help message.
 ;
 ; Parameters:
-;   none
+;   none.
 ;
 ; Returns:
-;   none
+;   none.
 ;
 ; Remarks:
 ;   This function displays the help message.
@@ -410,11 +407,11 @@ invalid:    jmp     ::invalid
 
 .PROC help
 
-            ldx     #.HIBYTE(help_msg)
-            lda     #.LOBYTE(help_msg)
-            jsr     cputs
+            ldx     #.HIBYTE(help_msg)  ; read help message address MSB
+            lda     #.LOBYTE(help_msg)  ; read help message address LSB
+            jsr     cputs               ; print help message
             
-            rts
+            rts                         ; done!
 
 .ENDPROC
 
