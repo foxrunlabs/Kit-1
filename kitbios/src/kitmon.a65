@@ -416,79 +416,54 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 .ENDPROC
 
 
-;= JUMP/CALL ===================================================================
-; Jump to address OR JSR to subroutine.
+;= JUMP ========================================================================
+; Jump to address.
 ;
 ; Parameters:
-;   none
+;   ARG1 - address (optional).
 ;
 ; Returns:
-;   none
+;   none.
 ;
 ; Remarks:
-;   This function is dual purpose. It either jumps to an address specified on
-;   the command line or it executes a jsr to the address and returns to the
-;   monitor. If no address is specified, it will jump to the last address
-;   stored at PCREG.
+;   This function jumps to an address specified on the command line. If no
+;   address is specified, it will jump to the last address stored at PCREG. The
+;   A, X, Y, S, and P registers will be loaded with stored values.
 
 .CODE
 
 .PROC jump
-
-            ldx     #1                  ; X = starting index for trimspace
-            jsr     trimspace           ; trim spaces right of command
             
-            lda     cmdln, X            ; X = new index after trimspace
-            beq     callorjump          ; if NUL is after J, no change to ADDR   
+            ldx     #1                  ; set starting offset to 1
+            jsr     trimspace           ; trim spaces after command character
+            
+            lda     cmdln, X            ; read first non-space after command
+            beq     loadregs            ; branch if no address entered
             
             ;- get address from command line -----------------------------------
-            lda     #2                  ; 16-bit address
-            jsr     getbytes
-            bcc     invalid
+            lda     #2                  ; set byte counter to 2
+            jsr     getbytes            ; get 16-bit address from command line
+            bcc     invalid             ; branch if invalid address
             
-            lda     word
-            sta     PCREG
-            lda     word+1
-            sta     PCREG+1             ; update stored PC
+            lda     word                ; read address LSB
+            sta     PCREG               ; store address LSB to PCREG LSB
+            lda     word+1              ; read address MSB
+            sta     PCREG+1             ; store address MSB to PCREG MSB
             
-            ;- which function are we doing? ------------------------------------
-callorjump: lda     cmdln
-            cmp     #'C'
-            beq     call                ; execute CALL
+            ;- load registers from stored values -------------------------------
+loadregs:   ldx     SREG                ; read stored S register
+            txs                         ; transfer stored S to actual S
+            lda     PREG                ; read stored P register
+            pha                         ; save stored P register to stack
+            lda     AREG                ; read stored A register
+            ldx     XREG                ; read stored X register
+            ldy     YREG                ; read stored Y register
+            plp                         ; load stored P register to actual P
+            jmp     (PCREG)             ; jump to stored PC
             
-            ;- JUMP routine ----------------------------------------------------
-            ldx     SREG                ; only set S if JUMP routine
-            txs
-            lda     PREG
-            pha
-            lda     AREG
-            ldx     XREG
-            ldy     YREG
-            plp
-            jmp     (PCREG)
+            rts                         ; done!
             
-            ;- CALL routine ----------------------------------------------------
-call:       lda     PREG
-            pha
-            lda     AREG
-            ldx     XREG
-            ldy     YREG
-            plp
-            jsr     docall
-            
-            ;- save register values from JSR return ----------------------------
-            php
-            sta     AREG
-            stx     XREG
-            sty     YREG
-            pla
-            sta     PREG
-            
-            rts
-
-invalid:    jmp     ::invalid
-
-docall:     jmp     (PCREG)
+invalid:    jmp     ::invalid           ; jump to global invalid routine
 
 .ENDPROC
 
