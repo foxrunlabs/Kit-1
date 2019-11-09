@@ -539,7 +539,8 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 ; Load or write a 512 byte sector to/from SD card.
 ;
 ; Parameters:
-;   none
+;   dword - sector.
+;   word  - address.
 ;
 ; Returns:
 ;   none
@@ -552,56 +553,52 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 .CODE
 
 .PROC sdcard
-
-            ldx     #1
-            jsr     trimspace           ; trim spaces right of index 0
             
-            lda     cmdln, X
-            beq     invalid             ; if NUL is after L, invalid
+            ldx     #1                  ; set starting offset to 1
+            jsr     trimspace           ; trim spaces after command character
+            
+            lda     cmdln, X            ; read first non-space after command
+            beq     invalid             ; branch if no sector entered
             
             ;- get sector from command line ------------------------------------
-            lda     #4                  ; 32-bit sector number
-            jsr     getbytes
-            bcc     invalid
+            lda     #4                  ; set byte counter to 4
+            jsr     getbytes            ; get 32-bit sector from command line
+            bcc     invalid             ; branch if invalid dword
             
-            lda     dword               ; save retrieved 32-bit sector
-            sta     SECTOR
-            lda     dword+1
-            sta     SECTOR+1
-            lda     dword+2
-            sta     SECTOR+2
-            lda     dword+3
-            sta     SECTOR+3
+            lda     dword               ; read sector LSB
+            sta     SECTOR              ; save sector LSB to SECTOR LSB
+            lda     dword+1             ; read sector LSB+1 
+            sta     SECTOR+1            ; save sector LSB+1 to SECTOR LSB+1
+            lda     dword+2             ; read sector MSB-1
+            sta     SECTOR+2            ; save sector MSB-1 to SECTOR MSB-1
+            lda     dword+3             ; read sector MSB
+            sta     SECTOR+3            ; save sector MSB to SECTOR MSB
             
             ;- get address from command line -----------------------------------
-            jsr     trimspace
+            jsr     trimspace           ; trim spaces after sector
             
-            lda     cmdln, X
-            beq     invalid             ; no address entered
+            lda     cmdln, X            ; read first non-space after sector
+            beq     invalid             ; branch if no address entered
             
-            lda     #2                  ; 16-bit address
-            jsr     getbytes
-            bcc     invalid             ; not a valid address!
+            lda     #2                  ; set byte counter to 2
+            jsr     getbytes            ; get 16-bit address from command line
+            bcc     invalid             ; branch if invalid address
             
-            ldx     word+1              ; destination MSB
-            lda     word                ; destination LSB
+            ldx     word+1              ; read address MSB into X
+            lda     word                ; read address LSB into A
             
-            ldy     cmdln
-            cpy     #'W'
-            beq     notread             ; which operation, load or write?
+            ;- parse command for read or write ---------------------------------
+            ldy     cmdln               ; read command character
+            cpy     #'W'                ; compare with 'W'
+            beq     dowrite             ; branch if write command
             
-            jsr     read
-            bra     checkvalid
+            jsr     read                ; read sector from SD card
+            rts                         ; done!
             
-notread:    jsr     write
-            
-            ;- check for valid read/write --------------------------------------
-checkvalid: cmp     #0
-            beq     invalid
-            
-            rts
+dowrite:    jsr     write               ; write sector on SD card
+            rts                         ; done!
 
-invalid:    jmp     ::invalid
+invalid:    jmp     ::invalid           ; jump to global invalid routine
 
 .ENDPROC
 
