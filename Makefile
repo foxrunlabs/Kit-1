@@ -33,27 +33,27 @@ all : tools bios bin2c rom
 
 .PHONY: tools
 tools :
-	@echo "Building toolchain"
+	@echo "[Building toolchain]"
 	@$(MAKE) -C tools
 
 .PHONY: bios
 bios :
-	@echo "Building KitBIOS"
+	@echo "[Building KitBIOS]"
 	@$(MAKE) -C kitbios
 
 .PHONY: bin2c
 bin2c :
-	@echo "Converting .BIN to .C"
+	@echo "[Converting .BIN to .C]"
 	tools/bin/bin2c kitbios/bin/kitbios.bin kitrom.X/src/kitbios.c
 
 .PHONY: rom
 rom :
-	@echo "Building KitROM"
+	@echo "[Building KitROM]"
 	@$(MAKE) -C kitrom.X
 
 .PHONY: sim
 sim :
-	@echo "Building KitBIOS (py65mon version)"
+	@echo "[Building KitBIOS (py65mon version)]"
 	@$(MAKE) -C kitbios $@
 
 .PHONY: clean

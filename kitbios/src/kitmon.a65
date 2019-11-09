@@ -472,77 +472,65 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 ; Display CPU registers.
 ;
 ; Parameters:
-;   none
+;   register and byte (optional).
 ;
 ; Returns:
-;   none
+;   none.
 ;
 ; Remarks:
 ;   This function displays the CPU registers stored in RAM. It does not display
-;   the current values, due to them constantly changing.
+;   the current values, due to them constantly changing. If a specific register
+;   is entered with the command, the stored register value will be updated with
+;   the byte entered on the command line.
 
 .CODE
 
 .PROC regs
-
-            ldx     #1
-            jsr     trimspace
             
-            lda     cmdln, X
-            beq     print               ; if NUL is after R, print registers
+            ldx     #1                  ; set starting offset to 1
+            jsr     trimspace           ; trim spaces after command character
             
-            ldy     #0                  ; start of offset in stored reg table
+            lda     cmdln, X            ; read first non-space after command
+            beq     printregs           ; branch if no register selected.
             
-            ;- check for valid register A, X, or Y -----------------------------
-            cmp     #'A'
-            bne     maybeX              ; not A
-            bra     getupdate           ; get the updated value
-            
-maybeX:     cmp     #'X'
-            bne     maybeY
-            
-            ldy     #(XREG - AREG)      ; offset of X in stored table
-            bra     getupdate
-            
-maybeY:     cmp     #'Y'
-            bne     maybeS
-            
-            ldy     #(YREG - AREG)      ; offset of Y in stored table
-            bra     getupdate
-            
-maybeS:     cmp     #'S'
-            bne     maybeP
-            
-            ldy     #(SREG - AREG)      ; offset of S in stored table
-            bra     getupdate
-            
-maybeP:     cmp     #'P'
-            bne     invalid
-            
-            ldy     #(PREG - AREG)      ; offset of P in stored table
+            ;- check for valid register ----------------------------------------
+            ldy     #0                  ; stored register address offset
+            cmp     #'A'                ; A register
+            beq     getupdate           ; branch if A register
+            iny                         ; increment offset
+            cmp     #'X'                ; X register
+            beq     getupdate           ; branch if X register
+            iny                         ; increment offset
+            cmp     #'Y'                ; Y register
+            beq     getupdate           ; branch if Y register
+            iny                         ; increment offset
+            cmp     #'S'                ; S register
+            beq     getupdate           ; branch if S register
+            iny                         ; increment offset
+            cmp     #'P'                ; P register
+            bne     invalid             ; branch if not P register
             
             ;- update the stored register in memory ----------------------------
 getupdate:  inx                         ; advance the command line index
-            jsr     trimspace
+            jsr     trimspace           ; trim spaces after register character
             
-            lda     cmdln, X
-            beq     invalid             ; no byte entered
+            lda     cmdln, X            ; read first non-space after register
+            beq     invalid             ; branch if no byte entered
             
-            phy                         ; save the offset for stored register
-            lda     #1
-            jsr     getbytes
-            ply
-            bcc     invalid             ; not a valid byte!
+            phy                         ; save the stored register offset
+            lda     #1                  ; set byte counter to 1
+            jsr     getbytes            ; get 8-bit byte from command line
+            ply                         ; restore the stored register offset
+            bcc     invalid             ; branch if invalid byte entered
             
-            lda     byte
-            sta     AREG, Y             ; write to the appropriate storage
+            lda     byte                ; read the entered byte
+            sta     AREG, Y             ; write byte to appropriate stored reg
             
-            rts
+            rts                         ; done!
             
-            ;- print the registers ---------------------------------------------
-print:      jmp     ::printregs
+printregs:  jmp     ::printregs         ; jump to global printregs routine
             
-invalid:    jmp     ::invalid
+invalid:    jmp     ::invalid           ; jump to global invalid routine
 
 .ENDPROC
 
