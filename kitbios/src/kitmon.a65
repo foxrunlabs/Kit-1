@@ -123,7 +123,7 @@ kitmon:     stz     DADDR               ; initial memory dump address is $0300
 ; Display 128 bytes of memory.
 ;
 ; Parameters:
-;   ARG1 - start address (optional).
+;   word - start address (optional).
 ;
 ; Returns:
 ;   none.
@@ -236,8 +236,8 @@ print:      phy                         ; save byte counter
 ; Write to memory.
 ;
 ; Parameters:
-;   ARG1 - starting address.
-;   ...  - bytes.
+;   word    - starting address.
+;   byte(s) - data.
 ;
 ; Returns:
 ;   none.
@@ -249,7 +249,7 @@ print:      phy                         ; save byte counter
 .CODE
 
 .PROC enter
-            
+
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
@@ -296,8 +296,8 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 ; Fill memory with byte.
 ;
 ; Parameters:
-;   ARG1 - starting address.
-;   ARG2 - ending address.
+;   word - starting address.
+;   word - ending address.
 ;   byte - fill byte.
 ;
 ; Returns:
@@ -310,7 +310,7 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 .CODE
 
 .PROC fill
-            
+
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
@@ -420,7 +420,7 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 ; Jump to address.
 ;
 ; Parameters:
-;   ARG1 - address (optional).
+;   word - address (optional).
 ;
 ; Returns:
 ;   none.
@@ -433,7 +433,7 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 .CODE
 
 .PROC jump
-            
+
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
@@ -472,7 +472,7 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 ; Display CPU registers.
 ;
 ; Parameters:
-;   register and byte (optional).
+;   byte and byte - register and data (optional).
 ;
 ; Returns:
 ;   none.
@@ -486,7 +486,7 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 .CODE
 
 .PROC regs
-            
+
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
@@ -553,7 +553,7 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 .CODE
 
 .PROC sdcard
-            
+
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
@@ -607,52 +607,54 @@ invalid:    jmp     ::invalid           ; jump to global invalid routine
 ; Print the stack.
 ;
 ; Parameters:
-;   none
+;   none.
 ;
 ; Returns:
-;   none
+;   none.
 ;
 ; Remarks:
-;   This function prints the stack, referencing the stored stack pointer.
+;   This function prints the stack from bottom to top, referencing the stored
+;   stack pointer. The current stored stack pointer is printed as 'S'.
 
 .CODE
 
 .PROC stack
 
-            lda     #$01
-            sta     ARG1+1
-            lda     SREG
-            sta     ARG1
+            lda     #$01                ; load stack page
+            sta     ARG1+1              ; ARG1 MSB is stack page
+            lda     #$FF                ; load bottom of stack
+            sta     ARG1                ; ARG1 LSB is stack pointer
             
-loop:       lda     ARG1+1
-            jsr     printhex
-            lda     ARG1
-            jsr     printhex            
+loop:       lda     #$01                ; load stack page
+            jsr     printhex            ; print stack page in hex
+            lda     ARG1                ; load stack pointer
+            jsr     printhex            ; print stack pointer in hex
             
-            lda     #':'
-            jsr     putch
-            lda     #' '
-            jsr     putch
+            lda     #':'                ; load colon character
+            jsr     putch               ; print colon character
+            lda     #' '                ; load space character
+            jsr     putch               ; print space character
             
-            lda     ARG1
-            cmp     SREG
-            bne     notS
+            lda     ARG1                ; load stack pointer
+            cmp     SREG                ; compare with stored stack pointer
+            beq     done                ; branch if equal
             
-            lda     #'S'
-            jsr     putch
+            lda     (ARG1)              ; load data at stack pointer
+            jsr     printhex            ; print data in hex format
             
-            bra     newline
+            lda     #LF                 ; load linefeed character
+            jsr     putch               ; print linefeed character
             
-notS:       lda     (ARG1)
-            jsr     printhex
+            dec     ARG1                ; decrement stack pointer
+            bra     loop                ; loop
             
-newline:    lda     #LF
-            jsr     putch
+done:       lda     #'S'                ; load S character
+            jsr     putch               ; print S character
             
-            inc     ARG1
-            bne     loop
+            lda     #LF                 ; load linefeed character
+            jsr     putch               ; printer linefeed
             
-            rts
+            rts                         ; done!
 
 .ENDPROC
 

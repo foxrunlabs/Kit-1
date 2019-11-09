@@ -5,18 +5,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.7] - 2019-11-09
+### Changed
+- Updated ```stack``` command in KitMon to be more efficient.
+
 ## [0.1.6] - 2019-11-09
 ### Changed
-- Updated ```load``` and ```write``` to be more efficient.
+- Updated ```load``` and ```write``` commands in KitMon to be more efficient.
 
 ## [0.1.5] - 2019-11-09
 ### Changed
-- Updated ```register``` to be more efficient.
+- Updated ```register``` command in KitMon to be more efficient.
 - Updated Makefile output headers for better readability.
 
 ## [0.1.4] - 2019-11-06
 ### Changed
-- Updated ```jump``` to be more efficient and removed CALL code.
+- Updated ```jump``` command in KitMonto be more efficient and removed CALL
+code.
 
 ## [0.1.3] - 2019-11-05
 ### Changed
