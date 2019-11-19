@@ -29,6 +29,7 @@
 
 .INCLUDE    "kit1.inc"
 
+.IMPORT     fat16_init
 .IMPORT     kitmon
 .IMPORT     sdc_init
 .IMPORT     sdc_send_cmd
@@ -52,8 +53,8 @@
             FREQ = 5                    ; CPU clock in MHz
 
             MAJOR = 0
-            MINOR = 1
-            PATCH = 7
+            MINOR = 2
+            PATCH = 0
 
             .DEFINE VERSION .SPRINTF("%d.%d.%d", MAJOR, MINOR, PATCH)
 
@@ -71,9 +72,9 @@
 .CODE
             ;- ACIA initialization ---------------------------------------------
 kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
-            sta     ACIA_COMMAND
+            sta     ACIA_COMMAND        ; store in ACIA command register
             lda     #%00011111          ; 8-N-1, 19200 baud
-            sta     ACIA_CONTROL
+            sta     ACIA_CONTROL        ; store in ACIA control register
             
             ;- BIOS call table address -----------------------------------------
             lda     #.LOBYTE(bios_tbl_l)
@@ -86,10 +87,10 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
             sta     BIOSTH+1
             
             ;- reset uptime counter --------------------------------------------
-            stz     JIFFIES
-            stz     SECONDS
-            stz     MINUTES
-            stz     HOURS
+            stz     JIFFIES             ; clear jiffies
+            stz     SECONDS             ; clear seconds
+            stz     MINUTES             ; clear minutes
+            stz     HOURS               ; clear hours
             
             ;- jiffy counter initialization ------------------------------------
             lda     #%01000000          ; set timer 1 to continuous interrupts
@@ -121,16 +122,22 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
             sta     VIA_DDRA            ; MOSI, nCS, and CLK as outputs
             
             ;- SD card setup ---------------------------------------------------
+        .IFNDEF PY65
             lda     #SDC_CD             ; check CD
             bit     VIA_IRA
             beq     @monitor            ; not detected, skip initialization
             
             jsr     sdc_init
             beq     @monitor            ; not initialized
+        .ENDIF
             
-            ldx     #.HIBYTE(sdcard)    ; card detected
-            lda     #.LOBYTE(sdcard)
-            jsr     cputs
+            ;- initialize FAT16 volume -----------------------------------------
+            jsr     fat16_init          ; initialize FAT16 data in RAM
+            beq     @monitor            ; branch if error
+            
+            ldx     #.HIBYTE(sdcard)    ; card detected message MSB
+            lda     #.LOBYTE(sdcard)    ; card detected message LSB
+            jsr     cputs               ; print message
             
             ;- go to KitMon monitor --------------------------------------------
 @monitor:   

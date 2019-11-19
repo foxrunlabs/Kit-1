@@ -38,7 +38,7 @@ BINDIR   = $(PREFIX)/bin
 VPATH = $(SRCDIR)
 
 BIN  = kitbios.bin
-OBJS = kitbios.o kitmon.o sdcard.o spi.o
+OBJS = kitbios.o fat16.o kitmon.o sdcard.o spi.o
 
 PY65 = 
 

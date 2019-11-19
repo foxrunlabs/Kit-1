@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+### Added
+- FAT16 initialization that verifies first partition is FAT16, loads the boot
+sector, and computes the root directory region.
+### Changed
+- Initialize FAT16 in RAM after SD card setup.
+- Simulation loads pre-fabricated FAT16 image into RAM.
+
 ## [0.1.7] - 2019-11-09
 ### Changed
 - Updated ```stack``` command in KitMon to be more efficient.

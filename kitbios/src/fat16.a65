@@ -1,0 +1,164 @@
+;===============================================================================
+; Copyright 2019 Ryan Clarke
+;
+; Licensed under the Apache License, Version 2.0 (the "License"); you may not
+; use this file except in compliance with the License. You may obtain a copy of
+; the License at
+; 
+;     http://www.apache.org/licenses/LICENSE-2.0
+;
+; Unless required by applicable law or agreed to in writing, software
+; distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+; WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+; License for the specific language governing permissions and limitations under
+; the License.
+;===============================================================================
+
+;===============================================================================
+; Program   : KitBIOS
+; File Name : fat16.a65
+; Project   : Kit-1 8-bit Computer
+; Author    : Ryan Clarke
+; E-mail    : kj6msg@icloud.com
+;-------------------------------------------------------------------------------
+; Purpose   : KitBIOS FAT16 functions.
+;===============================================================================
+
+
+.PC02
+
+.INCLUDE    "kit1.inc"
+
+.IMPORT     read
+
+.EXPORT     fat16_init
+
+
+;===============================================================================
+; FAT16 FUNCTIONS
+;===============================================================================
+
+;= FAT16 INIT ==================================================================
+; Initialize FAT16 volume.
+;
+; Parameters:
+;   none.
+;
+; Returns:
+;   A = status.
+;
+; Remarks:
+;   This function loads the master boot record from a SD card, verifies the
+;   first partition is FAT16, loads the boot sector, and then finds and loads
+;   the root directory region.
+
+.PROC fat16_init
+
+            ;- load master boot record -----------------------------------------
+            lda     #.LOBYTE(MBR)       ; destination LSB
+            ldx     #.HIBYTE(MBR)       ; destination MSB
+            stz     SECTOR              ; master boot record lives at sector 0
+            stz     SECTOR+1            ; sector 0
+            stz     SECTOR+2            ; sector 0
+            stz     SECTOR+3            ; sector 0
+        .IFNDEF PY65
+            jsr     read                ; read master boot record from SD card
+            beq     error               ; branch if error
+        .ENDIF
+            
+            ;- check for boot signature $AA55 ----------------------------------
+            lda     MBR + $01FE         ; load second to last byte of MBR
+            cmp     #.LOBYTE(BOOTSIG)   ; check for boot signature
+            bne     error               ; branch if invalid
+            lda     MBR + $01FF         ; load last byte of MBR
+            cmp     #.HIBYTE(BOOTSIG)   ; check for boot signature
+            bne     error               ; branch if invalid
+            
+            ;- verify first partition is FAT16 ---------------------------------
+            lda     P1TYPE              ; load partition #1 type
+            cmp     #FAT16ID            ; compare with FAT16 type code
+            bne     error               ; branch if not FAT16
+            
+            ;- load FAT16 boot sector ------------------------------------------
+            lda     P1SECTOR            ; load FAT16 boot sector LBA
+            sta     SECTOR              ; store FAT16 boot sector LBA
+            lda     P1SECTOR+1          ; load FAT16 boot sector LBA
+            sta     SECTOR+1            ; store FAT16 boot sector LBA
+            lda     P1SECTOR+2          ; load FAT16 boot sector LBA
+            sta     SECTOR+2            ; store FAT16 boot sector LBA
+            lda     P1SECTOR+3          ; load FAT16 boot sector LBA
+            sta     SECTOR+3            ; store FAT16 boot sector LBA
+            lda     #.LOBYTE(BOOT)      ; destination LSB
+            ldx     #.HIBYTE(BOOT)      ; destination MSB
+        .IFNDEF PY65
+            jsr     read                ; read FAT16 boot sector from SD card
+            bne     cont                ; branch if success
+        .ELSE
+            bra     cont                ; branch over error code if simulating
+        .ENDIF
+            
+            ;- error -----------------------------------------------------------
+error:      lda     #0                  ; not initialized
+            rts                         ; done!
+            
+            ;- check for boot signature $AA55 ----------------------------------
+cont:       lda     BOOT + $01FE        ; load second to last byte of boot sec
+            cmp     #.LOBYTE(BOOTSIG)   ; check for boot signature
+            bne     error               ; branch if invalid
+            lda     BOOT + $01FF        ; load last byte of boot sector
+            cmp     #.HIBYTE(BOOTSIG)   ; check for boot signature
+            bne     error               ; branch if invalid
+            
+            ;- compute root directory region linear block address --------------
+            clc                         ; clear carry for 32-bit addition
+            lda     SECTOR              ; load FAT16 boot sector LBA
+            adc     RESERVE             ; add number of reserved sectors
+            sta     ROOTSEC             ; store root directory region LBA
+            lda     SECTOR+1            ; load FAT16 boot sector LBA
+            adc     RESERVE+1           ; add number of reserved sectors
+            sta     ROOTSEC+1           ; store root directory region LBA
+            lda     SECTOR+2            ; load FAT16 boot sector LBA
+            adc     #0                  ; add zero
+            sta     ROOTSEC+2           ; store root directory region LBA
+            lda     SECTOR+3            ; load FAT16 boot sector LBA
+            adc     #0                  ; add zero
+            sta     ROOTSEC+3           ; store root directory region LBA
+            
+            ldx     NUMFAT              ; load number of FATs
+            clc                         ; clear carry for 32-bit addition
+loop:       lda     ROOTSEC             ; load root directory region LBA
+            adc     SECPERFAT           ; add number of sectors per FAT
+            sta     ROOTSEC             ; store root directory region LBA
+            lda     ROOTSEC+1           ; load root directory region LBA
+            adc     SECPERFAT+1         ; add number of sectors per FAT
+            sta     ROOTSEC+1           ; store root directory region LBA
+            lda     ROOTSEC+2           ; load root directory region LBA
+            adc     #0                  ; add zero
+            sta     ROOTSEC+2           ; store root directory region LBA
+            lda     ROOTSEC+3           ; load root directory region LBA
+            adc     #0                  ; add zero
+            sta     ROOTSEC+3           ; store root directory region LBA
+            
+            dex                         ; decrement FAT number counter
+            bne     loop                ; branch if not zero
+            
+            ;- load root directory region --------------------------------------
+            lda     ROOTSEC             ; load root directory region LBA
+            sta     SECTOR              ; store root directory region LBA
+            lda     ROOTSEC+1           ; load root directory region LBA
+            sta     SECTOR+1            ; store root directory region LBA
+            lda     ROOTSEC+2           ; load root directory region LBA
+            sta     SECTOR+2            ; store root directory region LBA
+            lda     ROOTSEC+3           ; load root directory region LBA
+            sta     SECTOR+3            ; store root directory region LBA
+            lda     #.LOBYTE(ROOT)      ; destination LSB
+            ldx     #.HIBYTE(ROOT)      ; destination MSB
+        .IFNDEF PY65
+            jsr     read                ; read root directory region from SDC
+            beq     error               ; branch if error
+        .ENDIF
+            
+            lda     #1                  ; initialized
+            rts                         ; done!
+
+.ENDPROC
