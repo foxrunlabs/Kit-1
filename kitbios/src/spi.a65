@@ -27,6 +27,8 @@
 
 .PC02
 
+.MACPACK    generic
+
 .INCLUDE    "kit1.inc"
 
 .EXPORT     spi_xfer
@@ -81,7 +83,7 @@ loop:       asl     OUTB                ; (5) shift transmit bit to C flag
             dec     VIA_ORA             ; (6) toggle CLK low
             
             dex                         ; (2) decrement bit counter
-            bne     loop                ; (3) check for zero rollover
+            bnz     loop                ; (3) check for zero rollover
             
             ;- clean up and return ---------------------------------------------
             cli                         ; OK, turn interrupts back on

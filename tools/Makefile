@@ -39,8 +39,8 @@ VPATH = $(SRCDIR)
 BIN  = bin2c
 SRCS = bin2c.c
 
-CC      = gcc
-CFLAGS  = -working-directory $(SRCDIR)
+CC      = clang
+CFLAGS  = -working-directory $(SRCDIR) -Weverything
 
 .PHONY: all
 all : $(BIN)

@@ -27,12 +27,19 @@
 
 .PC02
 
+.MACPACK    generic
+
 .INCLUDE    "kit1.inc"
 
 .IMPORT     fat16_init
+.IMPORT     fat16_find
+.IMPORT     fat16_read
+
 .IMPORT     kitmon
+
 .IMPORT     sdc_init
 .IMPORT     sdc_send_cmd
+
 .IMPORT     spi_xfer
 
 .EXPORT     rst
@@ -57,9 +64,8 @@
             PATCH = 0
 
             .DEFINE VERSION .SPRINTF("%d.%d.%d", MAJOR, MINOR, PATCH)
-
-            ;- py65mon specific definitions ------------------------------------
-        .IFDEF PY65
+            
+        .IFDEF SIM                      ; simulator specific definitions
             PY65_PUTC = ACIA + $4       ; repurpose unused ACIA registers as
             PY65_GETC = ACIA + $5       ; input/output for py65mon
         .ENDIF
@@ -108,40 +114,68 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
             ;- clear screen ----------------------------------------------------
             ldx     #.HIBYTE(clrscr)
             lda     #.LOBYTE(clrscr)
-            jsr     cputs
+            jsr     cputs               ; clear terminal screen
             
             ;- print banner ----------------------------------------------------
             ldx     #.HIBYTE(banner)
             lda     #.LOBYTE(banner)
-            jsr     cputs
+            jsr     cputs               ; print BIOS header
             
             ;- SPI setup -------------------------------------------------------
             lda     #(SDC_MOSI | SDC_nCS)
-            sta     VIA_ORA             ; MOSI and nCS high
+            sta     VIA_ORA             ; set MOSI and nCS high
             ora     #SDC_CLK
-            sta     VIA_DDRA            ; MOSI, nCS, and CLK as outputs
+            sta     VIA_DDRA            ; set MOSI, nCS, and CLK as outputs
             
             ;- SD card setup ---------------------------------------------------
-        .IFNDEF PY65
-            lda     #SDC_CD             ; check CD
+        .IFNDEF SIM                     ; don't check SD card in simulator
+            lda     #SDC_CD             ; check card detect
             bit     VIA_IRA
-            beq     @monitor            ; not detected, skip initialization
+            bze     @monitor            ; not detected, skip initialization
             
             jsr     sdc_init
-            beq     @monitor            ; not initialized
+            bze     @monitor            ; branch if not initialized
         .ENDIF
             
             ;- initialize FAT16 volume -----------------------------------------
             jsr     fat16_init          ; initialize FAT16 data in RAM
-            beq     @monitor            ; branch if error
+            bze     @monitor            ; branch if error
             
-            ldx     #.HIBYTE(sdcard)    ; card detected message MSB
-            lda     #.LOBYTE(sdcard)    ; card detected message LSB
+            ;- find KitOS ------------------------------------------------------
+            lda     #.LOBYTE(kitosfile) ; address of KitOS file name string
+            ldx     #.HIBYTE(kitosfile)
+            jsr     fat16_find          ; find KitOS on the SD card
+            
+            cmp     #0                  ; verify valid starting cluster
+            bne     @startos            ; branch if valid (not zero)
+            cpx     #0
+            bne     @startos
+            
+            ldx     #.HIBYTE(osnotfound)
+            lda     #.LOBYTE(osnotfound)
             jsr     cputs               ; print message
+            bra     @monitor            ; launch the monitor
+            
+            ;- load KitOS ------------------------------------------------------
+@startos:   sta     CLUSTER             ; save starting cluster of KitOS
+            stx     CLUSTER+1
+            lda     #.LOBYTE(KITOS)     ; destination address of KitOS
+            ldx     #.HIBYTE(KITOS)
+        .IFNDEF SIM                     ; don't read the file in the simulator
+            jsr     fat16_read          ; read KitOS file from SD card
+            bze     @monitor            ; branch if error
+        .ENDIF
+            
+            ldx     #.HIBYTE(kitos)     ; starting KitOS message MSB
+            lda     #.LOBYTE(kitos)     ; starting KitOS message LSB
+            jsr     cputs               ; print message
+            
+            ;- start KitOS -----------------------------------------------------
+            ;jmp     KITOS
             
             ;- go to KitMon monitor --------------------------------------------
 @monitor:   
-        .IFNDEF PY65
+        .IFNDEF SIM                     ; don't use BRK if simulator
             brk                         ; BRK triggers the monitor on real CPU
             .BYTE   $00                 ; dummy byte for ca65 assembler
         .ELSE
@@ -191,17 +225,17 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
 
 .PROC putch
 
-        .IFNDEF PY65
+        .IFNDEF SIM
             sta     ACIA_DATA
             
             ;- 2 + (FREQ * 526 - 1) cycle delay --------------------------------
             ldy     #FREQ               ; (2)
 delay:      ldx     #104                ; (2)
 loop:       dex                         ; (2)
-            bne     loop                ; (3/2) 521 cycles for the loop
+            bnz     loop                ; (3/2) 521 cycles for the loop
             
             dey                         ; (2)
-            bne     delay               ; (3/2)
+            bnz     delay               ; (3/2)
         .ELSE
             sta     PY65_PUTC
         .ENDIF
@@ -234,14 +268,14 @@ loop:       dex                         ; (2)
             
             ldy     #0                  ; Y = character counter
 loop:       lda     (STRADDR), Y
-            beq     exit
+            bze     exit
             
 print:      phy                         ; putch destroys Y
             jsr     putch               ; write the character to terminal
 
             ply                         ; restore character counter 
             iny
-            bne     loop                ; 256 character maximum
+            bnz     loop                ; 256 character maximum
             
 exit:       rts
 
@@ -265,15 +299,15 @@ exit:       rts
 
 .PROC getch
 
-        .IFNDEF PY65
+        .IFNDEF SIM
             lda     ACIA_STATUS
             bit     #%00001000          ; Receive Data Register Full bit
-            beq     getch               ; keep polling if not set
+            bze     getch               ; keep polling if not set
         
             lda     ACIA_DATA
         .ELSE
             lda     PY65_GETC
-            beq     getch               ; py65mon will read zero if no character
+            bze     getch               ; py65mon will read zero if no character
         .ENDIF
             
             rts
@@ -330,7 +364,7 @@ data0:      lda     #$FF                ; dummy data
             sta     (SDCADDR), Y        ; save received byte
             
             iny
-            bne     data0               ; check for zero rollover
+            bnz     data0               ; check for zero rollover
             
             ;- get second 256 bytes --------------------------------------------
             inc     SDCADDR+1
@@ -340,7 +374,7 @@ data1:      lda     #$FF                ; dummy data
             sta     (SDCADDR), Y        ; save received byte
             
             iny
-            bne     data1               ; check for zero rollover
+            bnz     data1               ; check for zero rollover
             
             ;- get two CRC bytes -----------------------------------------------
             lda     #$FF                ; dummy data
@@ -413,7 +447,7 @@ data0:      lda     (SDCADDR), Y        ; get byte
             jsr     spi_xfer            ; send it to SD card
             
             iny
-            bne     data0               ; check for zero rollover
+            bnz     data0               ; check for zero rollover
             
             ;- send second 256 bytes -------------------------------------------
             inc     SDCADDR+1
@@ -422,7 +456,7 @@ data1:      lda     (SDCADDR), Y        ; get byte
             jsr     spi_xfer            ; send it to SD card
             
             iny
-            bne     data1               ; check for zero rollover
+            bnz     data1               ; check for zero rollover
             
             ;- send two CRC bytes ----------------------------------------------
             lda     #$FF                ; dummy data
@@ -497,7 +531,7 @@ irqbrk:     pha                         ; preserve A, X, and Y
             tsx                         ; status flag 4 bytes above SP, accounts
             lda     $0100 + 1 + 3, X    ; for current SP and 3 registers pushed
             bit     #%00010000
-            bne     break               ; B flag set, go to BRK handler
+            bnz     break               ; B flag set, go to BRK handler
             
             
 ;= IRQ HANDLER =================================================================
@@ -508,7 +542,7 @@ irq:        lda     VIA_IFR             ; did VIA request interrupt?
             
             ;- VIA handler -----------------------------------------------------
 @via:       inc     JIFFIES             ; 256 Hz interrupt
-            bne     @viaclear           ; check for zero rollover
+            bnz     @viaclear           ; check for zero rollover
             
             inc     SECONDS
             lda     SECONDS
@@ -621,7 +655,8 @@ bios_tbl_h: .BYTE .HIBYTE(rst - 1)
 
 .RODATA
 
-clrscr:     .BYTE ESC, "[2J", ESC, "[H", NUL    ; clear terminal and reset curs.
+clrscr:     .BYTE ESC, "[2J"        ; clear terminal
+            .BYTE ESC, "[H", NUL    ; reset cursor
 
 
 ;= STRINGS =====================================================================
@@ -630,8 +665,12 @@ clrscr:     .BYTE ESC, "[2J", ESC, "[H", NUL    ; clear terminal and reset curs.
 
 banner:     .BYTE "KitBIOS ", VERSION, LF
             .BYTE "Copyright 2019 Ryan Clarke", LF, LF, NUL
-            
-sdcard:     .BYTE "SD card found.", LF, LF, NUL
+
+kitosfile:  .BYTE "KITOS   BIN"
+
+osnotfound: .BYTE "KitOS not found.", LF, LF, NUL
+
+kitos:      .BYTE "Starting KitOS...", LF, LF, NUL
 
 
 ;===============================================================================

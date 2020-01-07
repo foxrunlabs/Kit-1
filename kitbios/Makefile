@@ -40,10 +40,10 @@ VPATH = $(SRCDIR)
 BIN  = kitbios.bin
 OBJS = kitbios.o fat16.o kitmon.o sdcard.o spi.o
 
-PY65 = 
+SIM = 
 
 AS      = ca65
-ASFLAGS = --cpu 65C02 -l $(BUILDDIR)/$(basename $@).lst -t none $(PY65)
+ASFLAGS = --cpu 65C02 -l $(BUILDDIR)/$(basename $@).lst -t none $(SIM)
 
 LD       = ld65
 LDCONFIG = memory.conf
@@ -66,7 +66,7 @@ sim : py65 all
 
 .PHONY: py65
 py65 :
-	$(eval PY65 = -D PY65)
+	$(eval SIM = -D SIM)
 
 .PHONY: clean
 clean :

@@ -27,6 +27,8 @@
 
 .PC02
 
+.MACPACK    generic
+
 .INCLUDE    "kit1.inc"
 
 .IMPORT     spi_xfer
@@ -63,7 +65,7 @@ native:     lda     #$FF                ; dummy data
             jsr     spi_xfer
             
             dey
-            bne     native              ; check for zero rollover
+            bnz     native              ; check for zero rollover
             
             ;- select SD card --------------------------------------------------
             lda     #SDC_nCS
@@ -97,12 +99,12 @@ cmd8resp:   lda     #$FF                ; dummy data
             jsr     spi_xfer
             
             dey
-            bne     cmd8resp            ; check for zero rollover
+            bnz     cmd8resp            ; check for zero rollover
             
             tax                         ; save last R7 response byte
             pla                         ; get first R7 response byte back
             bit     #ILLEGAL
-            bne     notv2               ; illegal command, possibly v1 or MMC
+            bnz     notv2               ; illegal command, possibly v1 or MMC
             
             txa                         ; get last R7 response byte back
             cmp     #$AA                ; check for 'echo back'
@@ -126,10 +128,10 @@ acmd41:     lda     #CMD55
             ldx     #$FF                ; dummy CRC
             jsr     sdc_send_cmd
             bit     #ILLEGAL
-            bne     deselect            ; illegal command, unknown card
+            bnz     deselect            ; illegal command, unknown card
             
             bit     #SDCIDLE
-            bne     acmd41              ; keep trying until not idle
+            bnz     acmd41              ; keep trying until not idle
             
             ;- set block size to 512 bytes -------------------------------------
 setblock:   lda     #CMD16
@@ -141,7 +143,7 @@ setblock:   lda     #CMD16
             ldx     #$FF                ; dummy CRC
             jsr     sdc_send_cmd
             bit     #ILLEGAL
-            bne     deselect            ; illegal command, unknown card
+            bnz     deselect            ; illegal command, unknown card
             
             pla                         ; retrieve stored return value
             inc     A                   ; SD card initialized!
@@ -206,7 +208,7 @@ response:   lda     #$FF                ; dummy data
             bne     done
             
             dey
-            bne     response            ; keep trying for a response
+            bnz     response            ; keep trying for a response
             
 done:       rts
 

@@ -33,7 +33,7 @@
 #include <sys/stat.h>
 
 
-char *header = "\
+#define FILEHEADER "\
 /*******************************************************************************\n\
  *  Copyright 2019 Ryan Clarke\n\
  *\n\
@@ -67,7 +67,7 @@ char *header = "\
 \n\
 const uint16_t bios_start = 0x%04X;\n\
 \n\
-const uint8_t bios[%d] = {\n";
+const uint8_t bios[%u] = {\n"
 
 
 int main(int argc, char *argv[])
@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
     }
     
     /* allocate buffer for input file data */
-    if((buf = malloc(st.st_size * sizeof(uint8_t))) == NULL)
+    if((buf = malloc((size_t)st.st_size * sizeof(uint8_t))) == NULL)
     {
         fprintf(stderr, "%s: insufficent memory\n", argv[0]);
         fclose(file_in);
@@ -135,11 +135,11 @@ int main(int argc, char *argv[])
         return EXIT_FAILURE;
     }
     
-    fread(buf, sizeof(uint8_t), st.st_size, file_in);
+    fread(buf, sizeof(uint8_t), (size_t)st.st_size, file_in);
     
     /* compute starting address of BIOS in Kit-1 RAM space */
-    start = 0x10000 - st.st_size;
-    fprintf(file_out, header, start, st.st_size);
+    start = (uint16_t)(0x10000 - st.st_size);
+    fprintf(file_out, FILEHEADER, start, (uint16_t)st.st_size);
     
     /* convert individual bytes to hexadecimal format */
     j = 0;

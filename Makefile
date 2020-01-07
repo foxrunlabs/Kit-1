@@ -26,6 +26,9 @@
 #===============================================================================
 
 
+GREEN   = \033[0;32m
+NOCOLOR = \033[0m
+
 MAKE = make
 
 .PHONY: all
@@ -33,31 +36,32 @@ all : tools bios bin2c rom
 
 .PHONY: tools
 tools :
-	@echo "[Building toolchain]"
+	@echo "[${GREEN}Building toolchain${NOCOLOR}]"
 	@$(MAKE) -C tools
 
 .PHONY: bios
 bios :
-	@echo "[Building KitBIOS]"
+	@echo "[${GREEN}Building KitBIOS${NOCOLOR}]"
 	@$(MAKE) -C kitbios
 
 .PHONY: bin2c
 bin2c :
-	@echo "[Converting .BIN to .C]"
+	@echo "[${GREEN}Converting .BIN to .C${NOCOLOR}]"
 	tools/bin/bin2c kitbios/bin/kitbios.bin kitrom.X/src/kitbios.c
 
 .PHONY: rom
 rom :
-	@echo "[Building KitROM]"
+	@echo "[${GREEN}Building KitROM${NOCOLOR}]"
 	@$(MAKE) -C kitrom.X
 
 .PHONY: sim
 sim :
-	@echo "[Building KitBIOS (py65mon version)]"
+	@echo "[${GREEN}Building KitBIOS (py65mon version)${NOCOLOR}]"
 	@$(MAKE) -C kitbios $@
 
 .PHONY: clean
 clean :
+	@echo "[${GREEN}Cleaning${NOCOLOR}]"
 	@$(MAKE) -C tools $@
 	@$(MAKE) -C kitbios $@
 	@$(MAKE) -C kitrom.X $@

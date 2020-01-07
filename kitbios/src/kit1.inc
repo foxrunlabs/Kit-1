@@ -68,75 +68,61 @@ DEL  = $7F
 ; ZERO PAGE MEMORY MAP
 ;===============================================================================
 
-;= GENERAL REGISTERS ===========================================================
-
-R0 = $00
-R1 = $01
-R2 = $02
-R3 = $03
-R4 = $04
-R5 = $05
-R6 = $06
-R7 = $07
-R8 = $08
-R9 = $09
-RA = $0A
-RB = $0B
-RC = $0C
-RD = $0D
-RE = $0E
-RF = $0F
-
-
 ;= BIOS CALL TABLE =============================================================
 
-BIOSTL = $10                    ; 16-bit call table (LSBs) pointer
-BIOSTH = $12                    ; 16-bit call table (MSBs) pointer
+BIOSTL = $00                    ; call table (LSBs) pointer (16-bit)
+BIOSTH = $02                    ; call table (MSBs) pointer (16-bit)
 
 
 ;= BIOS ROUTINES ===============================================================
 
-JIFFIES = $14                   ; uptime counter values
-SECONDS = $15
-MINUTES = $16
-HOURS   = $17
+JIFFIES = $04                   ; uptime counter values
+SECONDS = $05
+MINUTES = $06
+HOURS   = $07
 
-STRADDR = $18                   ; 16-bit string pointer for cputs
+STRADDR = $08                   ; string pointer for cputs (16-bit)
 
 
 ;= KITMON ======================================================================
 
-ARG1 = $1A                      ; 32-bit command line arguments
-ARG2 = $1E
+ARG1 = $0A                      ; command line arguments (32-bit)
+ARG2 = $0E
 
-PCREG = $22                     ; CPU register storage
-AREG  = $24
-XREG  = $25
-YREG  = $26
-SREG  = $27
-PREG  = $28
+PCREG = $12                     ; CPU register storage
+AREG  = $14
+XREG  = $15
+YREG  = $16
+SREG  = $17
+PREG  = $18
 
-DADDR = $29                     ; saved 16-bit address for memory dump function
+DADDR = $19                     ; saved address for dump (16-bit)
 
 
 ;= SPI =========================================================================
 
-INB    = $2B                    ; received byte
-OUTB   = $2C                    ; transmit byte
-SHADOW = $2D                    ; shadow register for SPI port
+INB    = $1B                    ; received byte
+OUTB   = $1C                    ; transmit byte
+SHADOW = $1D                    ; shadow register for SPI port
 
 
 ;= SD CARD =====================================================================
 
-CMDARG  = $2E                   ; 32-bit command argument
+CMDARG  = $1E                   ; command argument (32-bit)
 
-SDCADDR = $32                   ; 16-bit address for sector read/write
-SECTOR  = CMDARG                ; 32-bit sector number
+SDCADDR = $22                   ; address pointer for sector read/write (16-bit)
+SECTOR  = CMDARG                ; sector number (32-bit)
 
 
 ;= FAT16 =======================================================================
 
-ROOTSEC = $34                   ; 32-bit root directory region sector
+FATREG   = $24                  ; FAT region LBA (32-bit)
+ROOTREG  = $28                  ; root directory region LBA (32-bit)
+DATAREG  = $2C                  ; data region LBA (32-bit)
+
+DIRENTRY = $30                  ; directory table entry pointer (16-bit)
+FILENAME = $32                  ; file name pointer for find function (16-bit)
+CLUSTER  = $34                  ; cluster for file read function (16-bit)
 
 
 ;===============================================================================
@@ -155,7 +141,7 @@ ACIA_COMMAND = ACIA + $2
 ACIA_CONTROL = ACIA + $3
 
 ;- device 1 --------------------------------------------------------------------
-VIA      = IO + $20
+VIA      = IO  + $20
 VIA_ORB  = VIA + $0
 VIA_IRB  = VIA_ORB
 VIA_ORA  = VIA + $1
@@ -189,11 +175,11 @@ DEV3 = IO + $80
 
 ;= PINS ========================================================================
 
-SDC_CLK  = %00000001
-SDC_nCS  = %00000010
-SDC_CD   = %00000100
-SDC_MOSI = %01000000
-SDC_MISO = %10000000
+SDC_CLK  = %00000001            ; SPI clock
+SDC_nCS  = %00000010            ; SPI chip select
+SDC_CD   = %00000100            ; card detect
+SDC_MOSI = %01000000            ; SPI serial output (host)
+SDC_MISO = %10000000            ; SPI serial input (host)
 
 
 ;= COMMANDS ====================================================================
@@ -211,51 +197,59 @@ CMD58  = $7A                    ; READ_OCR
 
 ;= RESPONSES ===================================================================
 
-SDCIDLE = $01
-ILLEGAL = $04
-ACCEPT  = $05
-DATATKN = $FE
-
-
-;===============================================================================
-; MASTER BOOT RECORD
-;===============================================================================
-
-;= CONSTANTS ===================================================================
-
-BOOTSIG = $AA55
-FAT16ID = $06
-
-;= MEMORY MAP ==================================================================
-
-MBR      = $0300
-PART1    = MBR + $1BE
-P1TYPE   = PART1 + $4
-P1SECTOR = PART1 + $8
-PART2    = MBR + $01CE
-P2TYPE   = PART2 + $4
-P2SECTOR = PART2 + $8
-PART3    = MBR + $01DE
-P3TYPE   = PART3 + $4
-P3SECTOR = PART3 + $8
-PART4    = MBR + $01EE
-P4TYPE   = PART4 + $4
-P4SECTOR = PART4 + $8
+SDCIDLE = $01                   ; SD card idle
+ILLEGAL = $04                   ; illegal command
+ACCEPT  = $05                   ; data accepted
+DATATKN = $FE                   ; data packet token
 
 
 ;===============================================================================
 ; FAT16
 ;===============================================================================
 
+;= CONSTANTS ===================================================================
+
+SIGNATURE  = $AA55              ; boot signature
+FAT16ID    = $06                ; FAT16 partition ID
+CLUSTEROFF = $1A                ; location of first cluster in directory entry
+BADSECTOR  = $FFF7              ; bad sector marker
+
 ;= MEMORY MAP ==================================================================
 
-;- FAT16 boot sector -----------------------------------------------------------
-BOOT      = $0500
-BPB       = BOOT + $00B
-RESERVE   = BPB + $03
-NUMFAT    = BPB + $05
-SECPERFAT = BPB + $0B
-VOLUME    = BOOT + $02B
+MBR   = $E800                   ; master boot record
+BOOT  = MBR  + $0200            ; boot sector
+FAT   = BOOT + $0200            ; FAT region
+ROOT  = FAT  + $0200            ; root directory region
+KITOS = $0300                   ; KitOS address
 
-;- FAT16 root directory sector -------------------------------------------------
-ROOT = $0700
+;- master boot record ----------------------------------------------------------
+PARTTBL = MBR + $1BE            ; location of partition table (64 bytes)
+MBRSIG  = MBR + $1FE            ; location of boot signature (16-bit)
+
+;- partition table -------------------------------------------------------------
+PART1    = PARTTBL              ; partition 1 (16 bytes)
+P1TYPE   = PART1 + 4            ; location partition type (8-bit)
+P1SECTOR = PART1 + 8            ; location of first sector LBA (32-bit)
+
+PART2    = PART1 + 16           ; partition 2 (16 bytes)
+P2TYPE   = PART2 + 4            ; location partition type (8-bit)
+P2SECTOR = PART2 + 8            ; location of first sector LBA (32-bit)
+
+PART3    = PART2 + 16           ; partition 3 (16 bytes)
+P3TYPE   = PART3 + 4            ; location partition type (8-bit)
+P3SECTOR = PART3 + 8            ; location of first sector LBA (32-bit)
+
+PART4    = PART3 + 16           ; partition 4 (16 bytes)
+P4TYPE   = PART4 + 4            ; location of partition type (8-bit)
+P4SECTOR = PART4 + 8            ; location of first sector LBA (32-bit)
+
+;- FAT16 boot sector -----------------------------------------------------------
+BPB     = BOOT + $00B           ; start of BIOS Parameter Block
+BOOTSIG = BOOT + $1FE           ; location of boot signature (16-bit)
+
+;- BIOS Parameter Block --------------------------------------------------------
+BPERSEC   = BPB                 ; Bytes Per Logical Sector (16-bit)
+RESSEC    = BPB + $03           ; Reserved Logical Sectors (16-bit)
+NUMFAT    = BPB + $05           ; Number of FATs (8-bit)
+NUMROOT   = BPB + $06           ; Number of Root Entries (16-bit)
+SECPERFAT = BPB + $0B           ; Sectors Per FAT (16-bit)
