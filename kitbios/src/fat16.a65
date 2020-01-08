@@ -62,10 +62,10 @@
 .PROC fat16_init
 
             ;- load master boot record -----------------------------------------
-            stz     SECTOR              ; master boot record lives at sector 0
-            stz     SECTOR+1
-            stz     SECTOR+2
-            stz     SECTOR+3
+            stz     dwSector            ; master boot record lives at sector 0
+            stz     dwSector+1
+            stz     dwSector+2
+            stz     dwSector+3
             lda     #.LOBYTE(MBR)       ; destination address for sector data
             ldx     #.HIBYTE(MBR)
         .IFNDEF SIM                     ; don't read SD card in simulator
@@ -74,27 +74,27 @@
         .ENDIF
             
             ;- check for boot signature $AA55 ----------------------------------
-            lda     MBRSIG              ; read MBR boot signature
+            lda     wMBRSig             ; read MBR boot signature
             cmp     #.LOBYTE(SIGNATURE) ; check for correct boot signature
             bne     error               ; branch if invalid
-            lda     MBRSIG+1            ; read MBR boot signature
+            lda     wMBRSig+1           ; read MBR boot signature
             cmp     #.HIBYTE(SIGNATURE) ; check for correct boot signature
             bne     error               ; branch if invalid
             
             ;- verify first partition is FAT16 ---------------------------------
-            lda     P1TYPE              ; read partition #1 type
+            lda     byP1Type            ; read partition #1 type
             cmp     #FAT16ID            ; compare with FAT16 type code
             bne     error               ; branch if not FAT16
             
             ;- load FAT16 boot sector ------------------------------------------
-            lda     P1SECTOR            ; read 32-bit FAT16 boot sector LBA
-            sta     SECTOR              ; copy to SECTOR parameter
-            lda     P1SECTOR+1
-            sta     SECTOR+1
-            lda     P1SECTOR+2
-            sta     SECTOR+2
-            lda     P1SECTOR+3
-            sta     SECTOR+3
+            lda     dwP1Sector          ; read 32-bit FAT16 boot sector LBA
+            sta     dwSector            ; copy to dwSector parameter
+            lda     dwP1Sector+1
+            sta     dwSector+1
+            lda     dwP1Sector+2
+            sta     dwSector+2
+            lda     dwP1Sector+3
+            sta     dwSector+3
             lda     #.LOBYTE(BOOT)      ; destination address for sector data
             ldx     #.HIBYTE(BOOT)
         .IFNDEF SIM                     ; don't read SD card in simulator
@@ -103,18 +103,18 @@
         .ENDIF
             
             ;- check for boot signature $AA55 ----------------------------------
-            lda     BOOTSIG             ; read boot sector boot signature
+            lda     wBootSig            ; read boot sector boot signature
             cmp     #.LOBYTE(SIGNATURE) ; check for correct boot signature
             bne     error               ; branch if invalid
-            lda     BOOTSIG+1           ; read boot sector boot signature
+            lda     wBootSig+1          ; read boot sector boot signature
             cmp     #.HIBYTE(SIGNATURE) ; check for correct boot signature
             bne     error               ; branch if invalid
             
             ;- verify 512 bytes per logical sector -----------------------------
-            lda     BPERSEC             ; read bytes per sector
+            lda     wBPerSec            ; read bytes per sector
             cmp     #.LOBYTE(512)       ; verify 512 bytes per sector
             bne     error               ; branch if invalid
-            lda     BPERSEC+1
+            lda     wBPerSec+1
             cmp     #.HIBYTE(512)
             beq     fatregion
             
@@ -123,59 +123,59 @@ error:      lda     #0                  ; not initialized
             bra     exit                ; all done
             
             ;- compute FAT region starting sector ------------------------------
-fatregion:  lda     SECTOR              ; read 32-bit FAT16 boot sector LBA
-            add     RESSEC              ; add number of reserved sectors
-            sta     FATREG              ; store 32-bit FAT region sector LBA
-            lda     SECTOR+1
-            adc     RESSEC+1
-            sta     FATREG+1
-            lda     SECTOR+2
+fatregion:  lda     dwSector            ; read 32-bit FAT16 boot sector LBA
+            add     wRsrvSec            ; add number of reserved sectors
+            sta     dwFATRegion         ; store 32-bit FAT region sector LBA
+            lda     dwSector+1
+            adc     wRsrvSec+1
+            sta     dwFATRegion+1
+            lda     dwSector+2
             adc     #0                  ; extend 16-bit value to 32-bit2
-            sta     FATREG+2
-            lda     SECTOR+3
+            sta     dwFATRegion+2
+            lda     dwSector+3
             adc     #0
-            sta     FATREG+3
+            sta     dwFATRegion+3
             
             ;- compute root directory region starting sector -------------------
-            lda     FATREG              ; read 32-bit FAT region sector LBA
-            sta     ROOTREG             ; copy to root dir. region sector LBA
-            lda     FATREG+1
-            sta     ROOTREG+1
-            lda     FATREG+2
-            sta     ROOTREG+2
-            lda     FATREG+3
-            sta     ROOTREG+3
+            lda     dwFATRegion         ; read 32-bit FAT region sector LBA
+            sta     dwRootRegion        ; copy to root dir. region sector LBA
+            lda     dwFATRegion+1
+            sta     dwRootRegion+1
+            lda     dwFATRegion+2
+            sta     dwRootRegion+2
+            lda     dwFATRegion+3
+            sta     dwRootRegion+3
             
-            ldx     NUMFAT              ; load FAT number counter
-rootregion: lda     ROOTREG             ; read 16-bit FAT region sector LBA
-            add     SECPERFAT           ; add number of sectors per FAT
-            sta     ROOTREG             ; store root directory region sector LBA
-            lda     ROOTREG+1
-            adc     SECPERFAT+1
-            sta     ROOTREG+1
-            lda     ROOTREG+2
+            ldx     byNumFAT            ; load FAT number counter
+rootregion: lda     dwRootRegion        ; read 16-bit FAT region sector LBA
+            add     wSecPerFAT          ; add number of sectors per FAT
+            sta     dwRootRegion        ; store root directory region sector LBA
+            lda     dwRootRegion+1
+            adc     wSecPerFAT+1
+            sta     dwRootRegion+1
+            lda     dwRootRegion+2
             adc     #0                  ; extend 16-bit value to 32-bits
-            sta     ROOTREG+2
-            lda     ROOTREG+3
+            sta     dwRootRegion+2
+            lda     dwRootRegion+3
             adc     #0
-            sta     ROOTREG+3
+            sta     dwRootRegion+3
             
             dex                         ; decrement FAT number counter
             bnz     rootregion          ; branch if more remain
             
             ;- compute data region starting sector -----------------------------
-            lda     ROOTREG             ; read root directory region sector LBA
+            lda     dwRootRegion        ; read root directory region sector LBA
             add     #.LOBYTE(32)        ; add root directory region size
-            sta     DATAREG             ; store data region sector LBA
-            lda     ROOTREG+1
+            sta     dwDataRegion        ; store data region sector LBA
+            lda     dwRootRegion+1
             adc     #.HIBYTE(32)
-            sta     DATAREG+1
-            lda     ROOTREG+2
+            sta     dwDataRegion+1
+            lda     dwRootRegion+2
             adc     #0                  ; extend 16-bit value to 32-bits
-            sta     DATAREG+2
-            lda     ROOTREG+3
+            sta     dwDataRegion+2
+            lda     dwRootRegion+3
             adc     #0
-            sta     DATAREG+3
+            sta     dwDataRegion+3
             
             ;- complete --------------------------------------------------------
             lda     #1                  ; initialized
@@ -201,18 +201,18 @@ exit:       rts                         ; done!
 
 .PROC fat16_find
 
-            sta     FILENAME            ; save address of file name string
-            stx     FILENAME+1
+            sta     psFilename          ; save address of file name string
+            stx     psFilename+1
             
             ;- load root directory region --------------------------------------
-            lda     ROOTREG             ; read root directory region LBA
-            sta     SECTOR              ; copy to SECTOR argument
-            lda     ROOTREG+1
-            sta     SECTOR+1
-            lda     ROOTREG+2
-            sta     SECTOR+2
-            lda     ROOTREG+3
-            sta     SECTOR+3
+            lda     dwRootRegion        ; read root directory region LBA
+            sta     dwSector            ; copy to dwSector argument
+            lda     dwRootRegion+1
+            sta     dwSector+1
+            lda     dwRootRegion+2
+            sta     dwSector+2
+            lda     dwRootRegion+3
+            sta     dwSector+3
             lda     #.LOBYTE(ROOT)      ; destination address for sector data
             ldx     #.HIBYTE(ROOT)
         .IFNDEF SIM                     ; don't read SD card in simulator
@@ -222,15 +222,15 @@ exit:       rts                         ; done!
             
             ;- search for file in root directory -------------------------------
 newtable:   lda     #.LOBYTE(ROOT)      ; load root directory region address
-            sta     DIRENTRY            ; store as first directory entry
+            sta     pdirEntry           ; store as first directory entry
             lda     #.HIBYTE(ROOT)
-            sta     DIRENTRY+1
+            sta     pdirEntry+1
             ldx     #16                 ; 16 entries per sector
             
 newentry:   ldy     #0                  ; reset character counter
-findfile:   lda     (DIRENTRY), Y       ; read character from filename
+findfile:   lda     (pdirEntry), Y      ; read character from filename
             bze     error               ; branch if NUL
-            cmp     (FILENAME), Y       ; compare with file name
+            cmp     (psFilename), Y     ; compare with file name
             bne     nextfile            ; branch if not equal
             
             iny                         ; increment character counter
@@ -238,28 +238,28 @@ findfile:   lda     (DIRENTRY), Y       ; read character from filename
             beq     startclust          ; branch if all 8+3 characters match
             bra     findfile            ; keep comparing characters
             
-nextfile:   lda     DIRENTRY            ; load directory entry address
+nextfile:   lda     pdirEntry           ; load directory entry address
             add     #.LOBYTE(32)        ; directory entries are 32 bytes
-            sta     DIRENTRY            ; store directory entry address
-            lda     DIRENTRY+1
+            sta     pdirEntry           ; store directory entry address
+            lda     pdirEntry+1
             adc     #.HIBYTE(32)
-            sta     DIRENTRY+1
+            sta     pdirEntry+1
             
             dex                         ; decrement directory entry counter
             bnz     newentry            ; branch if more entries exist
             
-            lda     SECTOR              ; load current root directory region LBA
+            lda     dwSector            ; load current root directory region LBA
             add     #1                  ; increment by one
-            sta     SECTOR              ; store root directory region LBA
-            lda     SECTOR+1
+            sta     dwSector            ; store root directory region LBA
+            lda     dwSector+1
             adc     #0
-            sta     SECTOR+1
-            lda     SECTOR+2
+            sta     dwSector+1
+            lda     dwSector+2
             adc     #0
-            sta     SECTOR+2
-            lda     SECTOR+3
+            sta     dwSector+2
+            lda     dwSector+3
             adc     #0
-            sta     SECTOR+3            
+            sta     dwSector+3            
             lda     #.LOBYTE(ROOT)      ; destination for sector data
             ldx     #.HIBYTE(ROOT)
         .IFNDEF SIM                     ; don't read SD card in simulator
@@ -272,10 +272,10 @@ nextfile:   lda     DIRENTRY            ; load directory entry address
             ;- extract starting cluster ----------------------------------------
 startclust: ldy     #CLUSTEROFF         ; load cluster offset
             iny                         ; read MSB first
-            lda     (DIRENTRY), Y       ; read starting cluster number
+            lda     (pdirEntry), Y      ; read starting cluster number
             tax                         ; move MSB to X
             dey                         ; decrement offset to get LSB
-            lda     (DIRENTRY), Y       ; read first cluster number
+            lda     (pdirEntry), Y      ; read first cluster number
             bra     exit                ; all done
             
             ;- error returns zero ----------------------------------------------
@@ -293,7 +293,7 @@ exit:       rts                         ; done!
 ;
 ; Parameters:
 ;   X:A     = 16-bit destination address.
-;   CLUSTER = starting cluster of file.
+;   wCluster = starting cluster of file.
 ;
 ; Returns:
 ;   A = status.
@@ -306,27 +306,27 @@ exit:       rts                         ; done!
 
 .PROC fat16_read
 
-            sta     dest                ; save destination address
-            stx     dest+1
+            sta     pabFile         ; save destination address
+            stx     pabFile+1
             
             ;- compute sector for cluster --------------------------------------
-loadfat:    lda     CLUSTER+1           ; load 16-bit cluster MSB
-            sta     SECTOR              ; store in SECTOR argument
-            lsr     SECTOR              ; divide-by-2 (effective divide-by-512)
+loadfat:    lda     wCluster+1          ; load 16-bit cluster MSB
+            sta     dwSector            ; store in dwSector argument
+            lsr     dwSector            ; divide-by-2 (effective divide-by-512)
             
             ;- load appropriate portion of FAT for cluster ---------------------
-            lda     FATREG              ; load FAT region sector LBA
-            add     SECTOR              ; add computed sector for cluster
-            sta     SECTOR              ; store in SECTOR argument
-            lda     FATREG+1
+            lda     dwFATRegion         ; load FAT region sector LBA
+            add     dwSector            ; add computed sector for cluster
+            sta     dwSector            ; store in dwSector argument
+            lda     dwFATRegion+1
             adc     #0                  ; extend 8-bit value to 32-bits
-            sta     SECTOR+1
-            lda     FATREG+2
+            sta     dwSector+1
+            lda     dwFATRegion+2
             adc     #0
-            sta     SECTOR+2
-            lda     FATREG+3
+            sta     dwSector+2
+            lda     dwFATRegion+3
             adc     #0
-            sta     SECTOR+3
+            sta     dwSector+3
             lda     #.LOBYTE(FAT)       ; destination address for sector data
             ldx     #.HIBYTE(FAT)
         .IFNDEF SIM                     ; don't read SD card in simulator
@@ -335,36 +335,36 @@ loadfat:    lda     CLUSTER+1           ; load 16-bit cluster MSB
         .ENDIF
             
             ;- compute offset into data region ---------------------------------
-            lda     CLUSTER             ; load cluster number
+            lda     wCluster            ; load cluster number
             sub     #.LOBYTE(2)         ; sub. 2 to compute data region offset
-            sta     SECTOR              ; store data region offset
-            lda     CLUSTER+1
+            sta     dwSector            ; store data region offset
+            lda     wCluster+1
             sbc     #.HIBYTE(2)
-            sta     SECTOR+1
+            sta     dwSector+1
             
             ;- compute RAM address of cluster ----------------------------------
-            lda     CLUSTER             ; load cluster number
+            lda     wCluster            ; load cluster number
             and     #.LOBYTE(255)       ; adjust to 0-255 range
             asl     A                   ; multiply by 2 since 16-bit cluster no.
-            sta     CLUSTER             ; store address offset
-            lda     CLUSTER+1
+            sta     wCluster            ; store address offset
+            lda     wCluster+1
             and     #.HIBYTE(255)
             rol     A
-            sta     CLUSTER+1
+            sta     wCluster+1
             
-            lda     CLUSTER             ; load FAT address offset
+            lda     wCluster            ; load FAT address offset
             add     #.LOBYTE(FAT)       ; add FAT address
-            sta     CLUSTER             ; store cluster address
-            lda     CLUSTER+1
+            sta     wCluster            ; store cluster address
+            lda     wCluster+1
             adc     #.HIBYTE(FAT)
-            sta     CLUSTER+1
+            sta     wCluster+1
             
             ;- check for bad sector --------------------------------------------
             ldy     #1                  ; offset from cluster address
-            lda     (CLUSTER), Y        ; load MSB of 16-bit cluster
+            lda     (wCluster), Y       ; load MSB of 16-bit cluster
             cmp     #.HIBYTE(BADSECTOR) ; compare with bad sector marker
             bne     ldcluster           ; branch if good sector
-            lda     (CLUSTER)           ; load LSB of 16-bit cluster
+            lda     (wCluster)          ; load LSB of 16-bit cluster
             cmp     #.LOBYTE(BADSECTOR) ; compare with bad sector marker
             bne     ldcluster           ; branch if good sector
             
@@ -373,20 +373,20 @@ error:      lda     #0                  ; file not loaded
             bra     exit
             
             ;- load cluster from SD card ---------------------------------------
-ldcluster:  lda     DATAREG             ; load data region sector LBA
-            add     SECTOR              ; add offset for cluster sector
-            sta     SECTOR              ; store offset sector LBA
-            lda     DATAREG+1
-            adc     SECTOR+1
-            sta     SECTOR+1
-            lda     DATAREG+2
+ldcluster:  lda     dwDataRegion        ; load data region sector LBA
+            add     dwSector            ; add offset for cluster sector
+            sta     dwSector            ; store offset sector LBA
+            lda     dwDataRegion+1
+            adc     dwSector+1
+            sta     dwSector+1
+            lda     dwDataRegion+2
             adc     #0                  ; expand 16-bit value to 32-bits
-            sta     SECTOR+2
-            lda     DATAREG+3
+            sta     dwSector+2
+            lda     dwDataRegion+3
             adc     #0
-            sta     SECTOR+3
-            lda     dest                ; destination address for sector data
-            ldx     dest+1
+            sta     dwSector+3
+            lda     pabFile         ; destination address for sector data
+            ldx     pabFile+1
         .IFNDEF SIM                     ; don't read SD card in simulator
             jsr     read                ; read data region from SDC
             bze     error               ; branch if error
@@ -394,35 +394,35 @@ ldcluster:  lda     DATAREG             ; load data region sector LBA
             
             ;- check for end of cluster chain ----------------------------------
             ldy     #1                  ; offset for 16-bit cluster
-            lda     (CLUSTER), Y        ; load cluster MSB
+            lda     (wCluster), Y       ; load cluster MSB
             cmp     #.HIBYTE($FFF0)     ; valid clusters are $0002-$FFEF 
             blt     lowerbound          ; branch if MSB less than $FF
-            lda     (CLUSTER)           ; load cluster LSB
+            lda     (wCluster)          ; load cluster LSB
             cmp     #.LOBYTE($FFF0)     ; valid clusters are $0002-$FFEF
             bge     complete            ; branch if LSB >= $F0
             
-lowerbound: lda     (CLUSTER), Y        ; load cluster MSB
+lowerbound: lda     (wCluster), Y       ; load cluster MSB
             cmp     #.HIBYTE($0002)     ; valid clusters are $0002-$FFEF
             bnz     nextclust           ; branch if MSB not $00
-            lda     (CLUSTER)           ; load cluster LSB
+            lda     (wCluster)          ; load cluster LSB
             cmp     #.LOBYTE($0002)     ; valid clusters are $0002-$FFEF
             blt     complete            ; branch if LSB less than $02
             
             ;- get next cluster number -----------------------------------------
-nextclust:  lda     (CLUSTER)           ; load next cluster LSB
+nextclust:  lda     (wCluster)          ; load next cluster LSB
             tax                         ; store in X temporarily
-            lda     (CLUSTER), Y        ; load next cluster MSB
-            sta     CLUSTER+1           ; store new cluster MSB
+            lda     (wCluster), Y       ; load next cluster MSB
+            sta     wCluster+1          ; store new cluster MSB
             txa                         ; load new cluster LSB
-            sta     CLUSTER             ; store new cluster LSB
+            sta     wCluster            ; store new cluster LSB
             
             ;- increment destination address by 512 bytes ----------------------
-            lda     dest                ; load destination address
+            lda     pabFile         ; load destination address
             add     #.LOBYTE(512)       ; increment by 512
-            sta     dest                ; store new destination address
-            lda     dest+1
+            sta     pabFile         ; store new destination address
+            lda     pabFile+1
             adc     #.HIBYTE(512)
-            sta     dest+1
+            sta     pabFile+1
             
             jmp     loadfat             ; keep loading the FAT
             
@@ -439,7 +439,7 @@ exit:       rts                         ; done!
 
 .BSS
 
-dest:       .RES 2
+pabFile:    .RES 2                      ; pointer to file data
 
 
 ;===============================================================================

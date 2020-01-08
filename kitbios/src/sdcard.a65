@@ -73,10 +73,10 @@ native:     lda     #$FF                ; dummy data
             
             ;- set SD card to idle state ---------------------------------------
             lda     #CMD0
-            stz     CMDARG+3            ; CMD0 argument is always $00000000
-            stz     CMDARG+2
-            stz     CMDARG+1
-            stz     CMDARG
+            stz     dwSDCommand+3       ; CMD0 argument is always $00000000
+            stz     dwSDCommand+2
+            stz     dwSDCommand+1
+            stz     dwSDCommand
             ldx     #$95                ; CRC for CMD0 is always $95
             jsr     sdc_send_cmd        ; send it
             cmp     #SDCIDLE
@@ -84,12 +84,12 @@ native:     lda     #$FF                ; dummy data
             
             ;- start testing for card version ----------------------------------
             lda     #CMD8            
-            stz     CMDARG+3            ; CMD8 argument $000001AA
-            stz     CMDARG+2
+            stz     dwSDCommand+3       ; CMD8 argument $000001AA
+            stz     dwSDCommand+2
             ldx     #$01
-            stx     CMDARG+1
+            stx     dwSDCommand+1
             ldx     #$AA
-            stx     CMDARG
+            stx     dwSDCommand
             ldx     #$87                ; CRC for CMD8 is always $87
             jsr     sdc_send_cmd
             pha                         ; save first byte of R7 response
@@ -112,19 +112,19 @@ cmd8resp:   lda     #$FF                ; dummy data
             
             ;- activate initializaton routine ----------------------------------
 acmd41:     lda     #CMD55
-            stz     CMDARG+3            ; CMD55 argument always $00000000
-            stz     CMDARG+2
-            stz     CMDARG+1
-            stz     CMDARG
+            stz     dwSDCommand+3       ; CMD55 argument always $00000000
+            stz     dwSDCommand+2
+            stz     dwSDCommand+1
+            stz     dwSDCommand
             ldx     #$FF                ; dummy CRC
             jsr     sdc_send_cmd        ; send CMD55 before sending ACMD41
             
             lda     #ACMD41
             ldx     #$40                ; ACMD41 argument always $40000000
-            stx     CMDARG+3
-            stz     CMDARG+2
-            stz     CMDARG+1
-            stz     CMDARG
+            stx     dwSDCommand+3
+            stz     dwSDCommand+2
+            stz     dwSDCommand+1
+            stz     dwSDCommand
             ldx     #$FF                ; dummy CRC
             jsr     sdc_send_cmd
             bit     #ILLEGAL
@@ -135,11 +135,11 @@ acmd41:     lda     #CMD55
             
             ;- set block size to 512 bytes -------------------------------------
 setblock:   lda     #CMD16
-            stz     CMDARG+3            ; CMD16 argument $00000200 for 512 bytes
-            stz     CMDARG+2
+            stz     dwSDCommand+3       ; CMD16 argument $00000200 for 512 bytes
+            stz     dwSDCommand+2
             ldx     #$02
-            stx     CMDARG+1
-            stz     CMDARG
+            stx     dwSDCommand+1
+            stz     dwSDCommand
             ldx     #$FF                ; dummy CRC
             jsr     sdc_send_cmd
             bit     #ILLEGAL
@@ -174,7 +174,7 @@ deselect:   lda     #SDC_nCS
 ; Parameters:
 ;   A      = command.
 ;   X      = 8-bit CRC.
-;   CMDARG = 32-bit command argument.
+;   dwSDCommand = 32-bit command argument.
 ;
 ; Returns:
 ;   A = response.
@@ -189,13 +189,13 @@ deselect:   lda     #SDC_nCS
             phx                         ; save CRC
             jsr     spi_xfer            ; send command
             
-            lda     CMDARG+3            ; send 32-bit argument
+            lda     dwSDCommand+3       ; send 32-bit argument
             jsr     spi_xfer
-            lda     CMDARG+2
+            lda     dwSDCommand+2
             jsr     spi_xfer
-            lda     CMDARG+1
+            lda     dwSDCommand+1
             jsr     spi_xfer
-            lda     CMDARG
+            lda     dwSDCommand
             jsr     spi_xfer
             
             pla                         ; get 8-bit CRC

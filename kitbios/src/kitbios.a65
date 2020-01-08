@@ -83,20 +83,20 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
             sta     ACIA_CONTROL        ; store in ACIA control register
             
             ;- BIOS call table address -----------------------------------------
-            lda     #.LOBYTE(bios_tbl_l)
-            sta     BIOSTL
-            lda     #.HIBYTE(bios_tbl_l)
-            sta     BIOSTL+1
-            lda     #.LOBYTE(bios_tbl_h)
-            sta     BIOSTH
-            lda     #.HIBYTE(bios_tbl_h)
-            sta     BIOSTH+1
+            lda     #.LOBYTE(apfnBIOSCallsL)
+            sta     papfnBIOSCallsL
+            lda     #.HIBYTE(apfnBIOSCallsL)
+            sta     papfnBIOSCallsL+1
+            lda     #.LOBYTE(apfnBIOSCallsH)
+            sta     papfnBIOSCallsH
+            lda     #.HIBYTE(apfnBIOSCallsH)
+            sta     papfnBIOSCallsH+1
             
             ;- reset uptime counter --------------------------------------------
-            stz     JIFFIES             ; clear jiffies
-            stz     SECONDS             ; clear seconds
-            stz     MINUTES             ; clear minutes
-            stz     HOURS               ; clear hours
+            stz     byJiffies           ; clear jiffies
+            stz     bySeconds           ; clear seconds
+            stz     byMinutes           ; clear minutes
+            stz     byHours             ; clear hours
             
             ;- jiffy counter initialization ------------------------------------
             lda     #%01000000          ; set timer 1 to continuous interrupts
@@ -112,13 +112,13 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
             cli                         ; global interrupts enabled
             
             ;- clear screen ----------------------------------------------------
-            ldx     #.HIBYTE(clrscr)
-            lda     #.LOBYTE(clrscr)
+            ldx     #.HIBYTE(szClrScr)
+            lda     #.LOBYTE(szClrScr)
             jsr     cputs               ; clear terminal screen
             
-            ;- print banner ----------------------------------------------------
-            ldx     #.HIBYTE(banner)
-            lda     #.LOBYTE(banner)
+            ;- print szBanner ----------------------------------------------------
+            ldx     #.HIBYTE(szBanner)
+            lda     #.LOBYTE(szBanner)
             jsr     cputs               ; print BIOS header
             
             ;- SPI setup -------------------------------------------------------
@@ -142,8 +142,8 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
             bze     @monitor            ; branch if error
             
             ;- find KitOS ------------------------------------------------------
-            lda     #.LOBYTE(kitosfile) ; address of KitOS file name string
-            ldx     #.HIBYTE(kitosfile)
+            lda     #.LOBYTE(sOSFile)   ; address of KitOS file name string
+            ldx     #.HIBYTE(sOSFile)
             jsr     fat16_find          ; find KitOS on the SD card
             
             cmp     #0                  ; verify valid starting cluster
@@ -151,14 +151,14 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
             cpx     #0
             bne     @startos
             
-            ldx     #.HIBYTE(osnotfound)
-            lda     #.LOBYTE(osnotfound)
+            ldx     #.HIBYTE(szNotFound)
+            lda     #.LOBYTE(szNotFound)
             jsr     cputs               ; print message
             bra     @monitor            ; launch the monitor
             
             ;- load KitOS ------------------------------------------------------
-@startos:   sta     CLUSTER             ; save starting cluster of KitOS
-            stx     CLUSTER+1
+@startos:   sta     wCluster            ; save starting cluster of KitOS
+            stx     wCluster+1
             lda     #.LOBYTE(KITOS)     ; destination address of KitOS
             ldx     #.HIBYTE(KITOS)
         .IFNDEF SIM                     ; don't read the file in the simulator
@@ -166,8 +166,8 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
             bze     @monitor            ; branch if error
         .ENDIF
             
-            ldx     #.HIBYTE(kitos)     ; starting KitOS message MSB
-            lda     #.LOBYTE(kitos)     ; starting KitOS message LSB
+            ldx     #.HIBYTE(szKitOS)   ; starting KitOS message MSB
+            lda     #.LOBYTE(szKitOS)   ; starting KitOS message LSB
             jsr     cputs               ; print message
             
             ;- start KitOS -----------------------------------------------------
@@ -181,22 +181,22 @@ kitbios:    lda     #%11001011          ; no parity, no echo, no IRQ
         .ELSE
             php                         ; preserve the status flags
             
-            stx     XREG                ; save X first
+            stx     byXreg              ; save X first
             
             tsx
             inx                         ; adjust for pushed status flags
-            stx     SREG                ; save the stack pointer
+            stx     bySreg              ; save the stack pointer
             
-            sta     AREG                ; now let's grab A and Y
-            sty     YREG
+            sta     byAreg              ; now let's grab A and Y
+            sty     byYreg
             
             lda     #.LOBYTE(@monitor)  ; creates the same address as the BRK
-            sta     PCREG               ; instruction on real CPU
+            sta     wPCreg              ; instruction on real CPU
             lda     #.HIBYTE(@monitor)
-            sta     PCREG+1
+            sta     wPCreg+1
             
             pla                         ; retrieve the status flags
-            sta     PREG                ; save status flags
+            sta     byPreg              ; save status flags
             
             jmp     kitmon
         .ENDIF
@@ -263,11 +263,11 @@ loop:       dex                         ; (2)
 
 .PROC cputs
             
-            sta     STRADDR
-            stx     STRADDR+1           ; (STRADDR) = string address
+            sta     pszString
+            stx     pszString+1
             
             ldy     #0                  ; Y = character counter
-loop:       lda     (STRADDR), Y
+loop:       lda     (pszString), Y
             bze     exit
             
 print:      phy                         ; putch destroys Y
@@ -334,8 +334,8 @@ exit:       rts
 
 .PROC read
 
-            sta     SDCADDR
-            stx     SDCADDR+1           ; set the destination address
+            sta     pabSector
+            stx     pabSector+1         ; set the destination address
             
             lda     #0
             pha                         ; default return value
@@ -361,17 +361,17 @@ token:      lda     #$FF                ; dummy data
             ldy     #0
 data0:      lda     #$FF                ; dummy data
             jsr     spi_xfer            ; get a byte
-            sta     (SDCADDR), Y        ; save received byte
+            sta     (pabSector), Y     ; save received byte
             
             iny
             bnz     data0               ; check for zero rollover
             
             ;- get second 256 bytes --------------------------------------------
-            inc     SDCADDR+1
+            inc     pabSector+1
             ldy     #0
 data1:      lda     #$FF                ; dummy data
             jsr     spi_xfer            ; get a byte
-            sta     (SDCADDR), Y        ; save received byte
+            sta     (pabSector), Y      ; save received byte
             
             iny
             bnz     data1               ; check for zero rollover
@@ -420,8 +420,8 @@ deselect:   lda     #SDC_nCS
 
 .PROC write
 
-            sta     SDCADDR
-            stx     SDCADDR+1           ; set the source address
+            sta     pabSector
+            stx     pabSector+1         ; set the source address
             
             lda     #0
             pha                         ; default return value
@@ -443,16 +443,16 @@ token:      lda     #DATATKN            ; always first byte in a data packet
                         
             ;- send first 256 bytes --------------------------------------------
             ldy     #0
-data0:      lda     (SDCADDR), Y        ; get byte
+data0:      lda     (pabSector), Y      ; get byte
             jsr     spi_xfer            ; send it to SD card
             
             iny
             bnz     data0               ; check for zero rollover
             
             ;- send second 256 bytes -------------------------------------------
-            inc     SDCADDR+1
+            inc     pabSector+1
             ldy     #0
-data1:      lda     (SDCADDR), Y        ; get byte
+data1:      lda     (pabSector), Y      ; get byte
             jsr     spi_xfer            ; send it to SD card
             
             iny
@@ -541,29 +541,29 @@ irq:        lda     VIA_IFR             ; did VIA request interrupt?
             bra     irqexit             ; nope, go to IRQ exit routine
             
             ;- VIA handler -----------------------------------------------------
-@via:       inc     JIFFIES             ; 256 Hz interrupt
+@via:       inc     byJiffies           ; 256 Hz interrupt
             bnz     @viaclear           ; check for zero rollover
             
-            inc     SECONDS
-            lda     SECONDS
+            inc     bySeconds
+            lda     bySeconds
             cmp     #60                 ; check for seconds rollover
             bne     @viaclear
             
-            stz     SECONDS
+            stz     bySeconds
             
-            inc     MINUTES
-            lda     MINUTES
+            inc     byMinutes
+            lda     byMinutes
             cmp     #60                 ; check for minutes rollover
             bne     @viaclear
             
-            stz     MINUTES
+            stz     byMinutes
             
-            inc     HOURS
-            lda     HOURS
+            inc     byHours
+            lda     byHours
             cmp     #24                 ; check for hours rollover
             bne     @viaclear
             
-            stz     HOURS
+            stz     byHours
             
 @viaclear:  lda     VIA_T1CL            ; clear timer 1 interrupt flag
             
@@ -583,31 +583,31 @@ break:      ply                         ; retrieve A, X, and Y
             plx
             pla
             
-            sta     AREG                ; save them to the storage locations
-            stx     XREG
-            sty     YREG
+            sta     byAreg              ; save them to the storage locations
+            stx     byXreg
+            sty     byYreg
             
             ;- retrive stack items pushed by BRK instruction -------------------
             pla                         ; retrieve P flags
-            sta     PREG                ; save to storage location
+            sta     byPreg              ; save to storage location
             
             pla                         ; retrieve return address LSB
-            sta     PCREG               ; save
+            sta     wPCreg              ; save
             pla                         ; retrieve return address MSB
-            sta     PCREG+1             ; save
+            sta     wPCreg+1            ; save
             
             ;- compute BRK address ---------------------------------------------
             sec
-            lda     PCREG
+            lda     wPCreg
             sbc     #2                  ; BRK pushes a return address which is
-            sta     PCREG               ; the BRK instruction + $0002
-            lda     PCREG+1
+            sta     wPCreg              ; the BRK instruction + $0002
+            lda     wPCreg+1
             sbc     #0
-            sta     PCREG+1
+            sta     wPCreg+1
             
             ;- stack is clean --------------------------------------------------
             tsx                         ; get the stack pointer
-            stx     SREG                ; save
+            stx     bySreg              ; save
             
             ;- reset P flags ---------------------------------------------------
             lda     #0                  ; easy way to reset everything
@@ -636,14 +636,16 @@ break:      ply                         ; retrieve A, X, and Y
 
 .RODATA
 
-bios_tbl_l: .BYTE .LOBYTE(rst - 1)
+apfnBIOSCallsL:
+            .BYTE .LOBYTE(rst - 1)
             .BYTE .LOBYTE(putch - 1)
             .BYTE .LOBYTE(cputs - 1)
             .BYTE .LOBYTE(getch - 1)
             .BYTE .LOBYTE(read - 1)
             .BYTE .LOBYTE(write - 1)
 
-bios_tbl_h: .BYTE .HIBYTE(rst - 1)
+apfnBIOSCallsH:
+            .BYTE .HIBYTE(rst - 1)
             .BYTE .HIBYTE(putch - 1)
             .BYTE .HIBYTE(cputs - 1)
             .BYTE .HIBYTE(getch - 1)
@@ -655,22 +657,22 @@ bios_tbl_h: .BYTE .HIBYTE(rst - 1)
 
 .RODATA
 
-clrscr:     .BYTE ESC, "[2J"        ; clear terminal
-            .BYTE ESC, "[H", NUL    ; reset cursor
+szClrScr:   .BYTE ESC, "[2J"            ; clear terminal
+            .BYTE ESC, "[H", NUL        ; reset cursor
 
 
 ;= STRINGS =====================================================================
 
 .RODATA
 
-banner:     .BYTE "KitBIOS ", VERSION, LF
+szBanner:   .BYTE "KitBIOS ", VERSION, LF
             .BYTE "Copyright 2019 Ryan Clarke", LF, LF, NUL
 
-kitosfile:  .BYTE "KITOS   BIN"
+sOSFile:    .BYTE "KITOS   BIN"
 
-osnotfound: .BYTE "KitOS not found.", LF, LF, NUL
+szNotFound: .BYTE "KitOS not found.", LF, LF, NUL
 
-kitos:      .BYTE "Starting KitOS...", LF, LF, NUL
+szKitOS:    .BYTE "Starting KitOS...", LF, LF, NUL
 
 
 ;===============================================================================

@@ -60,9 +60,9 @@
 
 .CODE
 
-kitmon:     stz     DADDR               ; initial memory dump address is $0300
+kitmon:     stz     pabDump             ; initial memory dump address is $0300
             lda     #$03
-            sta     DADDR+1
+            sta     pabDump+1
             
             jsr     printregs           ; start off by printing stored registers
             
@@ -74,7 +74,7 @@ kitmon:     stz     DADDR               ; initial memory dump address is $0300
             bcc     @getcmd             ; C flag zero if ESC received
             
             ;- evaluate command ------------------------------------------------
-            lda     cmdln               ; first character entered is command
+            lda     szCmdLn             ; first character entered is command
             sec
             sbc     #'?'                ; map ?-Z to 0-27
             bmi     @invalid            ; less than '?' is invalid
@@ -86,7 +86,7 @@ kitmon:     stz     DADDR               ; initial memory dump address is $0300
             jsr     @command            ; dummy to allow indirect indexed JSR
             bra     @getcmd             ; keep getting commands on return
             
-@command:   jmp     (cmd_tbl, X)
+@command:   jmp     (apfnCmds, X)
             
             ;- invalid command -------------------------------------------------
 @invalid:   jsr     invalid
@@ -141,15 +141,15 @@ kitmon:     stz     DADDR               ; initial memory dump address is $0300
 
 .PROC dump
 
-            lda     DADDR               ; read stored address LSB
-            sta     ARG1                ; set ARG1 LSB to stored address LSB
-            lda     DADDR+1             ; read stored address MSB
-            sta     ARG1+1              ; set ARG1 MSB to stored address MSB
+            lda     pabDump             ; read stored address LSB
+            sta     dwArg1              ; set dwArg1 LSB to stored address LSB
+            lda     pabDump+1           ; read stored address MSB
+            sta     dwArg1+1            ; set dwArg1 MSB to stored address MSB
             
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
-            lda     cmdln, X            ; read first non-space after command
+            lda     szCmdLn, X          ; read first non-space after command
             bze     linecount           ; branch if no address entered
             
             ;- get address from command line -----------------------------------
@@ -158,16 +158,16 @@ kitmon:     stz     DADDR               ; initial memory dump address is $0300
             bcc     ::invalid           ; branch if invalid address
             
             lda     word                ; read address LSB
-            sta     ARG1                ; store address LSB to ARG1 LSB
+            sta     dwArg1              ; store address LSB to dwArg1 LSB
             lda     word+1              ; read address MSB
-            sta     ARG1+1              ; store address MSB to ARG1 MSB
+            sta     dwArg1+1            ; store address MSB to dwArg1 MSB
             
             ;- print address ---------------------------------------------------
 linecount:  ldx     #8                  ; set line counter to 8
 printaddr:  phx                         ; save the line counter
-            lda     ARG1+1              ; read address MSB
+            lda     dwArg1+1            ; read address MSB
             jsr     printhex            ; print address MSB
-            lda     ARG1                ; read address LSB
+            lda     dwArg1              ; read address LSB
             jsr     printhex            ; print address LSB
             lda     #':'                ; set character to ':'
             jsr     putch               ; print ':'
@@ -177,7 +177,7 @@ printaddr:  phx                         ; save the line counter
             ;- print hex bytes -------------------------------------------------
             ldy     #0                  ; set byte counter to zero
 bytes:      phy                         ; save byte counter
-            lda     (ARG1), Y           ; read byte
+            lda     (dwArg1), Y         ; read byte
             jsr     printhex            ; print byte in hex
             lda     #' '                ; set character to space
             jsr     putch               ; print space
@@ -193,7 +193,7 @@ bytes:      phy                         ; save byte counter
             
             ;- print ASCII representation --------------------------------------
             ldy     #0                  ; reset byte counter to zero
-ascii:      lda     (ARG1), Y           ; read byte
+ascii:      lda     (dwArg1), Y         ; read byte
             cmp     #' '                ; space is the lowest printable byte
             blt     noprint             ; branch if less than space
             cmp     #'~'+1              ; tilde is upper end uof printable bytes
@@ -213,22 +213,22 @@ print:      phy                         ; save byte counter
             jsr     putch               ; print line feed
             
             clc                         ; clear C for 16-bit addition
-            lda     ARG1                ; read address LSB
+            lda     dwArg1              ; read address LSB
             adc     #16                 ; increment by 16 bytes
-            sta     ARG1                ; store new address LSB
-            lda     ARG1+1              ; read address MSB
+            sta     dwArg1              ; store new address LSB
+            lda     dwArg1+1            ; read address MSB
             adc     #0                  ; add carry flag
-            sta     ARG1+1              ; store address MSB
+            sta     dwArg1+1            ; store address MSB
             
             plx                         ; restore line counter
             dex                         ; decrement line counter
             bnz     printaddr           ; branch if less than 8 lines printed
             
             ;- update stored address -------------------------------------------
-            lda     ARG1                ; read address LSB
-            sta     DADDR               ; store address LSB into stored value
-            lda     ARG1+1              ; read address MSB
-            sta     DADDR+1             ; store address MSB into stored value
+            lda     dwArg1              ; read address LSB
+            sta     pabDump             ; store address LSB into stored value
+            lda     dwArg1+1            ; read address MSB
+            sta     pabDump+1           ; store address MSB into stored value
             
             rts                         ; done!
 
@@ -256,7 +256,7 @@ print:      phy                         ; save byte counter
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
-            lda     cmdln, X            ; read first non-space after command
+            lda     szCmdLn, X          ; read first non-space after command
             jeq     invalid             ; branch if no address entered
             
             ;- get address from command line -----------------------------------
@@ -265,14 +265,14 @@ print:      phy                         ; save byte counter
             jcc     invalid             ; branch if invalid address
             
             lda     word                ; read address LSB
-            sta     ARG1                ; store address LSB to ARG1 LSB
+            sta     dwArg1              ; store address LSB to dwArg1 LSB
             lda     word+1              ; read address MSB
-            sta     ARG1+1              ; store address MSB to ARG1 MSB
+            sta     dwArg1+1            ; store address MSB to dwArg1 MSB
             
             ;- get data from command line --------------------------------------
 dataloop:   jsr     trimspace           ; trim spaces after address/bytes
             
-            lda     cmdln, X            ; read first non-space after addr/byte
+            lda     szCmdLn, X          ; read first non-space after addr/byte
             bze     done                ; branch if nothing entered
             
             lda     #1                  ; set byte counter to 1
@@ -281,11 +281,11 @@ dataloop:   jsr     trimspace           ; trim spaces after address/bytes
             
             ;- store byte at address -------------------------------------------
             lda     byte                ; read byte
-            sta     (ARG1)              ; store byte at address pointed by ARG1
+            sta     (dwArg1)            ; store byte at address pointed by dwArg1
             
-            inc     ARG1                ; increment address pointer LSB
+            inc     dwArg1              ; increment address pointer LSB
             bnz     dataloop            ; branch if not rolled over yet
-            inc     ARG1+1              ; increment address pointer MSB
+            inc     dwArg1+1            ; increment address pointer MSB
             bra     dataloop            ; branch for more data
 
 done:       rts                         ; done!
@@ -315,7 +315,7 @@ done:       rts                         ; done!
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
-            lda     cmdln, X            ; read first non-space after command
+            lda     szCmdLn, X          ; read first non-space after command
             jeq     invalid             ; branch if no address entered
             
             ;- get first address of range --------------------------------------
@@ -325,14 +325,14 @@ done:       rts                         ; done!
             
             ;- save first address ----------------------------------------------
             lda     word                ; read address LSB
-            sta     ARG1                ; store address LSB to ARG1 LSB
+            sta     dwArg1              ; store address LSB to dwArg1 LSB
             lda     word+1              ; read address MSB
-            sta     ARG1+1              ; store address MSB to ARG1 MSB
+            sta     dwArg1+1            ; store address MSB to dwArg1 MSB
             
             ;- get last address of range ---------------------------------------
             jsr     trimspace           ; trim spaces after first address
             
-            lda     cmdln, X            ; read first non-space after address
+            lda     szCmdLn, X          ; read first non-space after address
             jeq     invalid             ; branch if no second address entered
             
             lda     #2                  ; set byte counter to 2
@@ -341,23 +341,23 @@ done:       rts                         ; done!
             
             ;- verify second address is greater than or equal to first ---------
             lda     word+1              ; read second address MSB
-            cmp     ARG1+1              ; compare with first address MSB
+            cmp     dwArg1+1            ; compare with first address MSB
             jcc     invalid             ; branch if second < first
             
             lda     word                ; read second address LSB
-            cmp     ARG1                ; compare with first address LSB
+            cmp     dwArg1              ; compare with first address LSB
             jcc     invalid             ; branch if second < first
             
             ;- save second address ---------------------------------------------
             lda     word                ; read address LSB
-            sta     ARG2                ; store address LSB to ARG2 LSB
+            sta     dwArg2              ; store address LSB to dwArg2 LSB
             lda     word+1              ; read address MSB
-            sta     ARG2+1              ; store address MSB to ARG2 MSB
+            sta     dwArg2+1            ; store address MSB to dwArg2 MSB
             
             ;- get fill bytes --------------------------------------------------
             jsr     trimspace           ; trim spaces after second address
             
-            lda     cmdln, X            ; read first non-space after address
+            lda     szCmdLn, X          ; read first non-space after address
             jeq     invalid             ; branch if no fill byte entered
             
             lda     #1                  ; set byte counter to 1
@@ -366,22 +366,22 @@ done:       rts                         ; done!
             
             ;- fill memory range with byte -------------------------------------
 fillloop:   lda     byte                ; read fill byte
-            sta     (ARG1)              ; store fill byte in memory
+            sta     (dwArg1)            ; store fill byte in memory
             
             ;- increment first address and check for rollover ------------------
-            inc     ARG1                ; increment first address LSB
+            inc     dwArg1              ; increment first address LSB
             bnz     compaddr            ; branch if no rollover from $FF->$00
-            inc     ARG1+1              ; increment first address MSB
+            inc     dwArg1+1            ; increment first address MSB
             bze     done                ; branch if rollover from $FFFF->$0000
                                     
-            ;- keep looping if ARG1 <= ARG2 ------------------------------------
-compaddr:   lda     ARG1+1              ; read first address MSB
-            cmp     ARG2+1              ; compare with second address MSB
+            ;- keep looping if dwArg1 <= dwArg2 ------------------------------------
+compaddr:   lda     dwArg1+1            ; read first address MSB
+            cmp     dwArg2+1            ; compare with second address MSB
             blt     fillloop            ; branch if first < second
             bne     done                ; branch if first <> second
             
-            lda     ARG1                ; read first address LSB
-            cmp     ARG2                ; compare with second address LSB
+            lda     dwArg1              ; read first address LSB
+            cmp     dwArg2              ; compare with second address LSB
             ble     fillloop            ; branch if first <= second
                                     
 done:       rts                         ; done!
@@ -405,8 +405,8 @@ done:       rts                         ; done!
 
 .PROC help
 
-            ldx     #.HIBYTE(help_msg)  ; read help message address MSB
-            lda     #.LOBYTE(help_msg)  ; read help message address LSB
+            ldx     #.HIBYTE(szHelp)    ; read help message address MSB
+            lda     #.LOBYTE(szHelp)    ; read help message address LSB
             jsr     cputs               ; print help message
             
             rts                         ; done!
@@ -425,7 +425,7 @@ done:       rts                         ; done!
 ;
 ; Remarks:
 ;   This function jumps to an address specified on the command line. If no
-;   address is specified, it will jump to the last address stored at PCREG. The
+;   address is specified, it will jump to the last address stored at wPCreg. The
 ;   A, X, Y, S, and P registers will be loaded with stored values.
 
 .CODE
@@ -435,7 +435,7 @@ done:       rts                         ; done!
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
-            lda     cmdln, X            ; read first non-space after command
+            lda     szCmdLn, X          ; read first non-space after command
             bze     loadregs            ; branch if no address entered
             
             ;- get address from command line -----------------------------------
@@ -444,20 +444,20 @@ done:       rts                         ; done!
             jcc     invalid             ; branch if invalid address
             
             lda     word                ; read address LSB
-            sta     PCREG               ; store address LSB to PCREG LSB
+            sta     wPCreg              ; store address LSB to wPCreg LSB
             lda     word+1              ; read address MSB
-            sta     PCREG+1             ; store address MSB to PCREG MSB
+            sta     wPCreg+1            ; store address MSB to wPCreg MSB
             
             ;- load registers from stored values -------------------------------
-loadregs:   ldx     SREG                ; read stored S register
+loadregs:   ldx     bySreg              ; read stored S register
             txs                         ; transfer stored S to actual S
-            lda     PREG                ; read stored P register
+            lda     byPreg              ; read stored P register
             pha                         ; save stored P register to stack
-            lda     AREG                ; read stored A register
-            ldx     XREG                ; read stored X register
-            ldy     YREG                ; read stored Y register
+            lda     byAreg              ; read stored A register
+            ldx     byXreg              ; read stored X register
+            ldy     byYreg              ; read stored Y register
             plp                         ; load stored P register to actual P
-            jmp     (PCREG)             ; jump to stored PC
+            jmp     (wPCreg)            ; jump to stored PC
             
             rts                         ; done!
 
@@ -486,7 +486,7 @@ loadregs:   ldx     SREG                ; read stored S register
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
-            lda     cmdln, X            ; read first non-space after command
+            lda     szCmdLn, X          ; read first non-space after command
             jeq     printregs           ; branch if no register selected.
             
             ;- check for valid register ----------------------------------------
@@ -510,7 +510,7 @@ loadregs:   ldx     SREG                ; read stored S register
 getupdate:  inx                         ; advance the command line index
             jsr     trimspace           ; trim spaces after register character
             
-            lda     cmdln, X            ; read first non-space after register
+            lda     szCmdLn, X          ; read first non-space after register
             jeq     invalid             ; branch if no byte entered
             
             phy                         ; save the stored register offset
@@ -520,7 +520,7 @@ getupdate:  inx                         ; advance the command line index
             jcc     invalid             ; branch if invalid byte entered
             
             lda     byte                ; read the entered byte
-            sta     AREG, Y             ; write byte to appropriate stored reg
+            sta     byAreg, Y           ; write byte to appropriate stored reg
             
             rts                         ; done!
 
@@ -549,7 +549,7 @@ getupdate:  inx                         ; advance the command line index
             ldx     #1                  ; set starting offset to 1
             jsr     trimspace           ; trim spaces after command character
             
-            lda     cmdln, X            ; read first non-space after command
+            lda     szCmdLn, X          ; read first non-space after command
             jeq     invalid             ; branch if no sector entered
             
             ;- get sector from command line ------------------------------------
@@ -558,18 +558,18 @@ getupdate:  inx                         ; advance the command line index
             jcc     invalid             ; branch if invalid dword
             
             lda     dword               ; read sector LSB
-            sta     SECTOR              ; save sector LSB to SECTOR LSB
+            sta     dwSector            ; save sector LSB to dwSector LSB
             lda     dword+1             ; read sector LSB+1 
-            sta     SECTOR+1            ; save sector LSB+1 to SECTOR LSB+1
+            sta     dwSector+1          ; save sector LSB+1 to dwSector LSB+1
             lda     dword+2             ; read sector MSB-1
-            sta     SECTOR+2            ; save sector MSB-1 to SECTOR MSB-1
+            sta     dwSector+2          ; save sector MSB-1 to dwSector MSB-1
             lda     dword+3             ; read sector MSB
-            sta     SECTOR+3            ; save sector MSB to SECTOR MSB
+            sta     dwSector+3          ; save sector MSB to dwSector MSB
             
             ;- get address from command line -----------------------------------
             jsr     trimspace           ; trim spaces after sector
             
-            lda     cmdln, X            ; read first non-space after sector
+            lda     szCmdLn, X          ; read first non-space after sector
             jeq     invalid             ; branch if no address entered
             
             lda     #2                  ; set byte counter to 2
@@ -580,7 +580,7 @@ getupdate:  inx                         ; advance the command line index
             lda     word                ; read address LSB into A
             
             ;- parse command for read or write ---------------------------------
-            ldy     cmdln               ; read command character
+            ldy     szCmdLn             ; read command character
             cpy     #'W'                ; compare with 'W'
             beq     dowrite             ; branch if write command
             
@@ -613,13 +613,13 @@ exit:       rts                         ; done!
 .PROC stack
 
             lda     #$01                ; load stack page
-            sta     ARG1+1              ; ARG1 MSB is stack page
+            sta     dwArg1+1            ; dwArg1 MSB is stack page
             lda     #$FF                ; load bottom of stack
-            sta     ARG1                ; ARG1 LSB is stack pointer
+            sta     dwArg1              ; dwArg1 LSB is stack pointer
             
 loop:       lda     #$01                ; load stack page
             jsr     printhex            ; print stack page in hex
-            lda     ARG1                ; load stack pointer
+            lda     dwArg1              ; load stack pointer
             jsr     printhex            ; print stack pointer in hex
             
             lda     #':'                ; load colon character
@@ -627,17 +627,17 @@ loop:       lda     #$01                ; load stack page
             lda     #' '                ; load space character
             jsr     putch               ; print space character
             
-            lda     ARG1                ; load stack pointer
-            cmp     SREG                ; compare with stored stack pointer
+            lda     dwArg1              ; load stack pointer
+            cmp     bySreg              ; compare with stored stack pointer
             beq     done                ; branch if equal
             
-            lda     (ARG1)              ; load data at stack pointer
+            lda     (dwArg1)            ; load data at stack pointer
             jsr     printhex            ; print data in hex format
             
             lda     #LF                 ; load linefeed character
             jsr     putch               ; print linefeed character
             
-            dec     ARG1                ; decrement stack pointer
+            dec     dwArg1              ; decrement stack pointer
             bra     loop                ; loop
             
 done:       lda     #'S'                ; load S character
@@ -722,7 +722,7 @@ exit:       rts
             stz     dword+3
             
             ;- convert ASCII character to hexadecimal --------------------------
-parse:      lda     cmdln, X
+parse:      lda     szCmdLn, X
             bze     valid               ; check for NUL terminator
             cmp     #' '
             beq     valid               ; ignore trailing spaces
@@ -905,21 +905,21 @@ print:      phx                         ; putch destroys X
 
 .PROC printregs
 
-            ldx     #.HIBYTE(reg_hdr)
-            lda     #.LOBYTE(reg_hdr)
+            ldx     #.HIBYTE(szRegHdr)
+            lda     #.LOBYTE(szRegHdr)
             jsr     cputs
             
             ;- program counter -------------------------------------------------
-            lda     PCREG+1
+            lda     wPCreg+1
             jsr     printhex
-            lda     PCREG
+            lda     wPCreg
             jsr     printhex
             lda     #' '
             jsr     putch
             
             ;- A, X, Y, S, and P registers -------------------------------------
             ldx     #0
-loop:       lda     AREG, X             ; get stored register
+loop:       lda     byAreg, X           ; get stored register
             phx                         ; putch destroys X
             jsr     printhex            ; print hexadecimal register value
             
@@ -931,7 +931,7 @@ loop:       lda     AREG, X             ; get stored register
             cpx     #4                  ; only print A, X, Y, and S in hex
             bne     loop
             
-            lda     PREG
+            lda     byPreg
             jsr     printbin            ; print P in binary format
             
             lda     #LF
@@ -1000,13 +1000,13 @@ getkey:     jsr     getch
             and     #%11011111          ; convert to uppercase
             
             ;- save key to buffer ----------------------------------------------
-storekey:   sta     cmdln, X            ; save key to command line buffer
+storekey:   sta     szCmdLn, X          ; save key to command line buffer
             inx                         ; update command line index
             bra     getkey              ; get more keys
             
             ;- escape handler --------------------------------------------------
-esc:        ldx     #.HIBYTE(clrln)
-            lda     #.LOBYTE(clrln)
+esc:        ldx     #.HIBYTE(szClrLn)
+            lda     #.LOBYTE(szClrLn)
             jsr     cputs               ; clear the current line
             
             clc                         ; C cleared signals ESC
@@ -1035,7 +1035,7 @@ reset:      jmp     rst                 ; reset the system!
 lf:         cpx     #0                  ; if X is zero, then nothing entered
             beq     getkey              ; ignore if empty, get more keys
             
-            stz     cmdln, X            ; add NUL terminator
+            stz     szCmdLn, X          ; add NUL terminator
             
             lda     #LF
             jsr     putch               ; echo the LF character
@@ -1070,7 +1070,7 @@ eot:        brk                         ; dump into the py65mon monitor
 
 .PROC trimspace
 
-            lda     cmdln, X            ; get command line character
+            lda     szCmdLn, X          ; get command line character
             cmp     #' '
             bne     exit                ; if it's not a ' ', we are done
             
@@ -1090,7 +1090,7 @@ exit:       rts
 
 .RODATA
 
-cmd_tbl:    .WORD help                  ; ?
+apfnCmds:   .WORD help                  ; ?
             .WORD invalid               ; @
             .WORD invalid               ; A
             .WORD invalid               ; B
@@ -1124,14 +1124,14 @@ cmd_tbl:    .WORD help                  ; ?
 
 .RODATA
 
-clrln:      .BYTE ESC, "[2K", CR, NUL   ; clear entire line and reset cursor
+szClrLn:    .BYTE ESC, "[2K", CR, NUL   ; clear entire line and reset cursor
 
 
 ;= STRINGS =====================================================================
 
 .RODATA
 
-help_msg:   .BYTE "dump",  HT, HT,  "D [address]", LF
+szHelp:     .BYTE "dump",  HT, HT,  "D [address]", LF
             .BYTE "enter", HT, HT,  "E address list", LF
             .BYTE "fill",  HT, HT,  "F range byte", LF
             .BYTE "help",  HT, HT,  "?", LF
@@ -1146,7 +1146,7 @@ help_msg:   .BYTE "dump",  HT, HT,  "D [address]", LF
             .BYTE "write", HT, HT,  "W sector address", LF
             .BYTE NUL
 
-reg_hdr:    .BYTE " PC  A  X  Y  S  NV-BDIZC", LF, NUL
+szRegHdr:   .BYTE " PC  A  X  Y  S  NV-BDIZC", LF, NUL
 
 
 ;===============================================================================
@@ -1155,7 +1155,7 @@ reg_hdr:    .BYTE " PC  A  X  Y  S  NV-BDIZC", LF, NUL
 
 .BSS
 
-cmdln:      .RES CMDMAX+1               ; command line buffer, add room for NUL
+szCmdLn:    .RES CMDMAX+1               ; command line buffer, add room for NUL
 
 byte:
 word:

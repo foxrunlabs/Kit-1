@@ -53,13 +53,13 @@
 
 .PROC spi_xfer
 
-            sta     OUTB
-            stz     INB
+            sta     byOut
+            stz     byIn
             
             lda     VIA_IRA             ; we don't want to change nCS
             and     #SDC_nCS            ; isolate nCS
             ora     #SDC_CLK            ; make sure CLK high
-            sta     SHADOW              ; save in shadow register
+            sta     byVIAShadow         ; save in shadow register
             
             lda     #0                  ; starting value for output register
             ldx     #8                  ; 8-bits
@@ -67,15 +67,15 @@
             sei                         ; no interrupts!
             
             ;- bit sending routine is 42 cycles total --------------------------
-loop:       asl     OUTB                ; (5) shift transmit bit to C flag
+loop:       asl     byOut               ; (5) shift transmit bit to C flag
             ror     A                   ; (2) rotate transmit bit into A
             lsr     A                   ; (2) shift transmit bit to MOSI bit
-            ora     SHADOW              ; (3) combine MOSI with shadow register
+            ora     byVIAShadow         ; (3) combine MOSI with shadow register
             sta     VIA_ORA             ; (4) send it to the SPI port
             
             lda     VIA_IRA             ; (4) get MISO bit
             asl     A                   ; (2) shift MISO bit to C flag
-            rol     INB                 ; (5) rotate MISO bit into received byte
+            rol     byIn                ; (5) rotate MISO bit into received byte
             
             lda     #0                  ; (2) start fresh and timing adjustment
             nop                         ; (2) timing adjustment
@@ -88,7 +88,7 @@ loop:       asl     OUTB                ; (5) shift transmit bit to C flag
             ;- clean up and return ---------------------------------------------
             cli                         ; OK, turn interrupts back on
             
-            lda     INB                 ; return the received byte in A
+            lda     byIn                ; return the received byte in A
             rts
 
 .ENDPROC

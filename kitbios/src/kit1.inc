@@ -70,59 +70,59 @@ DEL  = $7F
 
 ;= BIOS CALL TABLE =============================================================
 
-BIOSTL = $00                    ; call table (LSBs) pointer (16-bit)
-BIOSTH = $02                    ; call table (MSBs) pointer (16-bit)
+papfnBIOSCallsL = $00           ; BIOS call table (LSBs) pointer
+papfnBIOSCallsH = $02           ; BIOS call table (MSBs) pointer
 
 
 ;= BIOS ROUTINES ===============================================================
 
-JIFFIES = $04                   ; uptime counter values
-SECONDS = $05
-MINUTES = $06
-HOURS   = $07
+byJiffies  = $04                ; uptime counter values
+bySeconds  = $05
+byMinutes  = $06
+byHours    = $07
 
-STRADDR = $08                   ; string pointer for cputs (16-bit)
+pszString = $08                 ; string pointer for cputs
 
 
 ;= KITMON ======================================================================
 
-ARG1 = $0A                      ; command line arguments (32-bit)
-ARG2 = $0E
+dwArg1  = $0A                   ; command line arguments
+dwArg2  = $0E
 
-PCREG = $12                     ; CPU register storage
-AREG  = $14
-XREG  = $15
-YREG  = $16
-SREG  = $17
-PREG  = $18
+wPCreg  = $12                   ; CPU register storage
+byAreg  = $14
+byXreg  = $15
+byYreg  = $16
+bySreg  = $17
+byPreg  = $18
 
-DADDR = $19                     ; saved address for dump (16-bit)
+pabDump = $19                   ; pointer to data for dump command
 
 
 ;= SPI =========================================================================
 
-INB    = $1B                    ; received byte
-OUTB   = $1C                    ; transmit byte
-SHADOW = $1D                    ; shadow register for SPI port
+byIn        = $1B               ; received byte
+byOut       = $1C               ; transmit byte
+byVIAShadow = $1D               ; shadow register for SPI port
 
 
 ;= SD CARD =====================================================================
 
-CMDARG  = $1E                   ; command argument (32-bit)
+dwSDCommand = $1E               ; command argument
 
-SDCADDR = $22                   ; address pointer for sector read/write (16-bit)
-SECTOR  = CMDARG                ; sector number (32-bit)
+pabSector   = $22               ; pointer to sector read/write data
+dwSector    = dwSDCommand       ; sector number
 
 
 ;= FAT16 =======================================================================
 
-FATREG   = $24                  ; FAT region LBA (32-bit)
-ROOTREG  = $28                  ; root directory region LBA (32-bit)
-DATAREG  = $2C                  ; data region LBA (32-bit)
+dwFATRegion  = $24              ; FAT region LBA
+dwRootRegion = $28              ; root directory region LBA
+dwDataRegion = $2C              ; data region LBA
 
-DIRENTRY = $30                  ; directory table entry pointer (16-bit)
-FILENAME = $32                  ; file name pointer for find function (16-bit)
-CLUSTER  = $34                  ; cluster for file read function (16-bit)
+pdirEntry    = $30              ; directory table entry pointer
+psFilename   = $32              ; file name pointer for find function
+wCluster     = $34              ; cluster for file read function
 
 
 ;===============================================================================
@@ -223,33 +223,32 @@ ROOT  = FAT  + $0200            ; root directory region
 KITOS = $0300                   ; KitOS address
 
 ;- master boot record ----------------------------------------------------------
-PARTTBL = MBR + $1BE            ; location of partition table (64 bytes)
-MBRSIG  = MBR + $1FE            ; location of boot signature (16-bit)
+wMBRSig = MBR + $1FE            ; location of boot signature (16-bit)
 
 ;- partition table -------------------------------------------------------------
-PART1    = PARTTBL              ; partition 1 (16 bytes)
-P1TYPE   = PART1 + 4            ; location partition type (8-bit)
-P1SECTOR = PART1 + 8            ; location of first sector LBA (32-bit)
+tblPart1   = MBR + $1BE         ; partition 1 (16 bytes)
+byP1Type   = tblPart1 + 4       ; location partition type
+dwP1Sector = tblPart1 + 8       ; location of first sector LBA
 
-PART2    = PART1 + 16           ; partition 2 (16 bytes)
-P2TYPE   = PART2 + 4            ; location partition type (8-bit)
-P2SECTOR = PART2 + 8            ; location of first sector LBA (32-bit)
+tblPart2   = tblPart1 + 16      ; partition 2 (16 bytes)
+byP2Type   = tblPart2 + 4       ; location partition type
+dwP2Sector = tblPart2 + 8       ; location of first sector LBA
 
-PART3    = PART2 + 16           ; partition 3 (16 bytes)
-P3TYPE   = PART3 + 4            ; location partition type (8-bit)
-P3SECTOR = PART3 + 8            ; location of first sector LBA (32-bit)
+tblPart3   = tblPart2 + 16      ; partition 3 (16 bytes)
+byP3Type   = tblPart3 + 4       ; location partition type
+dwP3Sector = tblPart3 + 8       ; location of first sector LBA
 
-PART4    = PART3 + 16           ; partition 4 (16 bytes)
-P4TYPE   = PART4 + 4            ; location of partition type (8-bit)
-P4SECTOR = PART4 + 8            ; location of first sector LBA (32-bit)
+tblPart4   = tblPart3 + 16      ; partition 4 (16 bytes)
+byP4Type   = tblPart4 + 4       ; location of partition type
+dwP4Sector = tblPart4 + 8       ; location of first sector LBA
 
 ;- FAT16 boot sector -----------------------------------------------------------
-BPB     = BOOT + $00B           ; start of BIOS Parameter Block
-BOOTSIG = BOOT + $1FE           ; location of boot signature (16-bit)
+BPB      = BOOT + $00B          ; start of BIOS Parameter Block
+wBootSig = BOOT + $1FE          ; location of boot signature
 
 ;- BIOS Parameter Block --------------------------------------------------------
-BPERSEC   = BPB                 ; Bytes Per Logical Sector (16-bit)
-RESSEC    = BPB + $03           ; Reserved Logical Sectors (16-bit)
-NUMFAT    = BPB + $05           ; Number of FATs (8-bit)
-NUMROOT   = BPB + $06           ; Number of Root Entries (16-bit)
-SECPERFAT = BPB + $0B           ; Sectors Per FAT (16-bit)
+wBPerSec   = BPB                ; Bytes Per Logical Sector
+wRsrvSec   = BPB + $03          ; Reserved Logical Sectors
+byNumFAT    = BPB + $05         ; Number of FATs
+wNumRoot   = BPB + $06          ; Number of Root Entries
+wSecPerFAT = BPB + $0B          ; Sectors Per FAT
