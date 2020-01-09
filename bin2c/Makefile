@@ -21,7 +21,7 @@
 # Author    : Ryan Clarke
 # E-mail    : kj6msg@icloud.com
 #-------------------------------------------------------------------------------
-# Purpose : Makefile for the Kit-1 toolchain.
+# Purpose : Makefile for the bin2c utility.
 #===============================================================================
 
 
@@ -30,25 +30,25 @@ SHELL = /bin/sh
 .SUFFIXES:
 .SUFFIXES: .c
 
-PREFIX   = .
-SRCDIR   = $(PREFIX)/src
-BINDIR   = $(PREFIX)/bin
+PREFIX  = .
+SRCDIR := $(PREFIX)/src
+BINDIR := $(PREFIX)/bin
 
-VPATH = $(SRCDIR)
+VPATH := $(SRCDIR)
 
-BIN  = bin2c
-SRCS = bin2c.c
+BIN = bin2c
 
-CC      = clang
-CFLAGS  = -working-directory $(SRCDIR) -Weverything
+CC     = clang
+CFLAGS = -Weverything
 
 .PHONY: all
 all : $(BIN)
 
-$(BIN) : $(SRCS)
-	@mkdir -p $(BINDIR)
-	$(CC) $(CFLAGS) $(SRCS) -o $@
-	@mv $(BIN) $(BINDIR)
+$(BINDIR) :
+	mkdir -p $@
+
+% : %.c | $(BINDIR)
+	$(CC) $(CFLAGS) -o $(BINDIR)/$@ $^
 
 .PHONY: clean
 clean :

@@ -15,14 +15,13 @@
 #===============================================================================
 
 #===============================================================================
-# Program   : bin2c
 # File Name : Makefile
 # Project   : Kit-1 8-bit Computer
 # Author    : Ryan Clarke
 # E-mail    : kj6msg@icloud.com
 #-------------------------------------------------------------------------------
-# Purpose : Makefile for the entire Kit-1 project. It will build the toolchain,
-#           KitBIOS, and KitROM.
+# Purpose : Makefile for the entire Kit-1 project. It will build bin2c, KitBIOS,
+#           and KitROM.
 #===============================================================================
 
 
@@ -32,36 +31,33 @@ NOCOLOR = \033[0m
 MAKE = make
 
 .PHONY: all
-all : tools bios bin2c rom
+all : bin2c bios rom
 
-.PHONY: tools
-tools :
-	@echo "[${GREEN}Building toolchain${NOCOLOR}]"
-	@$(MAKE) -C tools
+.PHONY: bin2c
+bin2c :
+	@echo "[${GREEN}Building bin2c${NOCOLOR}]"
+	$(MAKE) -C bin2c
 
 .PHONY: bios
 bios :
 	@echo "[${GREEN}Building KitBIOS${NOCOLOR}]"
-	@$(MAKE) -C kitbios
-
-.PHONY: bin2c
-bin2c :
-	@echo "[${GREEN}Converting .BIN to .C${NOCOLOR}]"
-	tools/bin/bin2c kitbios/bin/kitbios.bin kitrom.X/src/kitbios.c
+	$(MAKE) -C kitbios
 
 .PHONY: rom
-rom :
+rom : bios bin2c
+	@echo "[${GREEN}Converting .BIN to .C${NOCOLOR}]"
+	bin2c/bin/bin2c kitbios/bin/kitbios.bin kitrom.X/src/kitbios.c
 	@echo "[${GREEN}Building KitROM${NOCOLOR}]"
-	@$(MAKE) -C kitrom.X
+	$(MAKE) -C kitrom.X
 
 .PHONY: sim
 sim :
 	@echo "[${GREEN}Building KitBIOS (py65mon version)${NOCOLOR}]"
-	@$(MAKE) -C kitbios $@
+	$(MAKE) -C kitbios $@
 
 .PHONY: clean
 clean :
 	@echo "[${GREEN}Cleaning${NOCOLOR}]"
-	@$(MAKE) -C tools $@
-	@$(MAKE) -C kitbios $@
-	@$(MAKE) -C kitrom.X $@
+	$(MAKE) -C bin2c $@
+	$(MAKE) -C kitbios $@
+	$(MAKE) -C kitrom.X $@

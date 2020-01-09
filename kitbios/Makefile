@@ -31,19 +31,22 @@ SHELL = /bin/sh
 .SUFFIXES: .a65 .o
 
 PREFIX   = .
-SRCDIR   = $(PREFIX)/src
-BUILDDIR = $(PREFIX)/build
-BINDIR   = $(PREFIX)/bin
+SRCDIR   := $(PREFIX)/src
+BUILDDIR := $(PREFIX)/build
+BINDIR   := $(PREFIX)/bin
 
-VPATH = $(SRCDIR)
+VPATH = $(SRCDIR):$(BUILDDIR):$(BINDIR)
 
-BIN  = kitbios.bin
-OBJS = kitbios.o fat16.o kitmon.o sdcard.o spi.o
+SRCS := $(notdir $(wildcard */*.a65))
 
-SIM = 
+OBJS := $(SRCS:%.a65=%.o)
+BIN   = kitbios.bin
+
+SIMOBJS := $(OBJS:%.o=%-sim.o)
+SIMBIN  := $(basename $(BIN))-sim.bin
 
 AS      = ca65
-ASFLAGS = --cpu 65C02 -l $(BUILDDIR)/$(basename $@).lst -t none $(SIM)
+ASFLAGS = --cpu 65C02 -l $(BUILDDIR)/$(basename $@).lst -t none
 
 LD       = ld65
 LDCONFIG = memory.conf
@@ -52,23 +55,23 @@ LDFLAGS  = -C $(LDCONFIG) -m $(BUILDDIR)/$(basename $@).map --obj-path $(BUILDDI
 .PHONY: all
 all : $(BIN)
 
-%.o : %.a65 kit1.inc
-	@mkdir -p $(BUILDDIR)
+.PHONY: sim
+sim : $(SIMBIN)
+
+$(BUILDDIR) $(BINDIR) :
+	mkdir -p $@
+
+%.o %-sim.o : %.a65 kit1.inc | $(BUILDDIR)
 	$(AS) $(ASFLAGS) -o $(BUILDDIR)/$@ $<
 
+$(BIN) $(SIMBIN) : | $(BINDIR)
+	$(LD) $(LDFLAGS) -o $(BINDIR)/$@ $^
+
 $(BIN) : $(OBJS)
-	@mkdir -p $(BINDIR)
-	$(LD) $(LDFLAGS) -o $@ $^
-	@mv $(BIN) $(BINDIR)
 
-.PHONY: sim
-sim : py65 all
-
-.PHONY: py65
-py65 :
-	$(eval SIM = -D SIM)
+$(SIMBIN) : $(SIMOBJS)
+$(SIMBIN) : ASFLAGS += -D SIM
 
 .PHONY: clean
 clean :
-	rm -rf $(BUILDDIR)
-	rm -rf $(BINDIR)
+	rm -rf $(BUILDDIR) $(BINDIR)
